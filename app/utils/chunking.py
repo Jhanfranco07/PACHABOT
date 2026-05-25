@@ -3,12 +3,25 @@ from __future__ import annotations
 import re
 
 from app.models.schemas import DocumentChunk
-from app.utils.text_cleaner import clean_text
+from app.utils.text_cleaner import clean_text, normalize_for_search
 
 
-TITLE_PATTERN = re.compile(r"^(T[IÍ]TULO\s+[A-Z0-9IVXLC]+.*)$", re.IGNORECASE)
+# CAMBIO FASE 7.1 — Restringir encabezados a titulos internos numerados.
+# Motivo: "Titulo Preliminar de la Ley" no es una seccion de la ordenanza consultada.
+# Riesgo mitigado: se admiten variantes legales habituales de titulos y articulos.
+TITLE_PATTERN = re.compile(
+    r"^((?:T[IÍ]TULO)\s+(?:[IVXLC]+|[0-9]+)(?:\b|\s).*)$",
+)
 ARTICLE_HEADER_PATTERN = re.compile(
-    r"^Art[íi]culo\s+([0-9]+[A-Z]?)\s*[°º]?\s*(?:[.\-:]|-\s)",
+    r"^(?:(?:Artículo|ARTÍCULO|ARTICULO)\s+"
+    r"([0-9]+(?:\.[0-9]+)?[A-Z]?)\s*[°º]?\s*(?:\.\s*-?|-|:|[\"“])"
+    r"|(?:Artículo|artículo|ARTÍCULO|ARTICULO)\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)\s*"
+    r"[°º]?\s+de\s+la\s+Ordenanza\b)",
+)
+AMENDMENT_ACTION_PATTERN = re.compile(
+    r"^(?:ARTÍCULO|ARTICULO)\s+(?:PRIMERO|SEGUNDO|TERCERO|CUARTO|QUINTO|"
+    r"SEXTO|S[ÉE]PTIMO|OCTAVO|NOVENO|D[ÉE]CIMO|VIG[ÉE]SIMO)\b.*"
+    r"(?:MODIFICAR|INCORPORAR)",
     re.IGNORECASE,
 )
 SUBSECTION_PATTERN = re.compile(r"^[A-ZÁÉÍÓÚÑ0-9 ,;:/().\-]{3,}$")
@@ -21,6 +34,7 @@ def split_text_into_chunks(
     source_title: str,
     chunk_size: int = 700,
     overlap: int = 120,
+    article_status: dict[str, dict] | None = None,
 ) -> list[DocumentChunk]:
     """Split legal text into meaningful chunks using titles and article headers."""
 
@@ -31,6 +45,7 @@ def split_text_into_chunks(
         source_title=source_title,
         chunk_size=chunk_size,
         overlap=overlap,
+        article_status=article_status or {},
     )
     if structured_chunks:
         return structured_chunks
@@ -41,6 +56,7 @@ def split_text_into_chunks(
         source_title=source_title,
         chunk_size=chunk_size,
         overlap=overlap,
+        article_status=article_status or {},
     )
 
 
@@ -51,6 +67,7 @@ def _extract_structured_legal_chunks(
     source_title: str,
     chunk_size: int,
     overlap: int,
+    article_status: dict[str, dict],
 ) -> list[DocumentChunk]:
     """Chunk legal documents, preserving titles and ignoring preamble article references."""
 
@@ -67,6 +84,10 @@ def _extract_structured_legal_chunks(
     while index < len(lines):
         line = lines[index]
         if not line:
+            index += 1
+            continue
+
+        if AMENDMENT_ACTION_PATTERN.match(line):
             index += 1
             continue
 
@@ -92,19 +113,27 @@ def _extract_structured_legal_chunks(
 
         article_match = ARTICLE_HEADER_PATTERN.match(line)
         if article_match:
-            article_lines = [line]
-            article_label = article_match.group(1)
+            article_label = (article_match.group(1) or article_match.group(2)).upper()
+            article_lines = [] if article_match.group(2) else [line]
             index += 1
             while index < len(lines):
                 next_line = lines[index]
-                if TITLE_PATTERN.match(next_line) or ARTICLE_HEADER_PATTERN.match(next_line):
+                if (
+                    TITLE_PATTERN.match(next_line)
+                    or ARTICLE_HEADER_PATTERN.match(next_line)
+                    or AMENDMENT_ACTION_PATTERN.match(next_line)
+                ):
                     break
                 if next_line:
                     article_lines.append(next_line)
                 index += 1
 
+            if not article_lines:
+                continue
             article_text = "\n".join(article_lines)
-            prefixed_text = article_text if not title_buffer else "\n".join(title_buffer + [article_text])
+            status_section = article_status.get(article_label, {}).get("section_title", "")
+            article_prefix = [status_section] if status_section else title_buffer
+            prefixed_text = article_text if not article_prefix else "\n".join(article_prefix + [article_text])
             article_chunks = _split_large_legal_block(
                 prefixed_text,
                 document_id=document_id,
@@ -114,6 +143,7 @@ def _extract_structured_legal_chunks(
                 chunk_number_start=chunk_number,
                 chunk_size=chunk_size,
                 overlap=overlap,
+                article_status=article_status,
             )
             chunks.extend(article_chunks)
             chunk_number += len(article_chunks)
@@ -135,7 +165,11 @@ def _extract_structured_legal_chunks(
                 if contextual_lines:
                     break
                 continue
-            if TITLE_PATTERN.match(next_line) or ARTICLE_HEADER_PATTERN.match(next_line):
+            if (
+                TITLE_PATTERN.match(next_line)
+                or ARTICLE_HEADER_PATTERN.match(next_line)
+                or AMENDMENT_ACTION_PATTERN.match(next_line)
+            ):
                 break
             contextual_lines.append(next_line)
             index += 1
@@ -150,6 +184,7 @@ def _extract_structured_legal_chunks(
             chunk_number_start=chunk_number,
             chunk_size=chunk_size,
             overlap=overlap,
+            article_status=article_status,
         )
         chunks.extend(contextual_chunks)
         chunk_number += len(contextual_chunks)
@@ -165,6 +200,7 @@ def _extract_structured_legal_chunks(
             chunk_number_start=chunk_number,
             chunk_size=chunk_size,
             overlap=overlap,
+            article_status=article_status,
         )
         chunks.extend(preamble_chunks)
 
@@ -191,6 +227,7 @@ def _split_large_legal_block(
     chunk_number_start: int,
     chunk_size: int,
     overlap: int,
+    article_status: dict[str, dict],
 ) -> list[DocumentChunk]:
     """Split a legal block while preserving article identity."""
 
@@ -214,6 +251,7 @@ def _split_large_legal_block(
                     section_title=section_title,
                     article_label=article_label,
                     chunk_number=chunk_number,
+                    article_status=article_status,
                 )
             )
             chunk_number += 1
@@ -232,6 +270,7 @@ def _split_large_legal_block(
                         section_title=section_title,
                         article_label=article_label,
                         chunk_number=chunk_number,
+                        article_status=article_status,
                     )
                 )
                 chunk_number += 1
@@ -247,6 +286,7 @@ def _split_large_legal_block(
                 section_title=section_title,
                 article_label=article_label,
                 chunk_number=chunk_number,
+                article_status=article_status,
             )
         )
 
@@ -261,20 +301,38 @@ def _build_chunk(
     section_title: str,
     article_label: str,
     chunk_number: int,
+    article_status: dict[str, dict],
 ) -> DocumentChunk:
     """Create a chunk with consistent metadata."""
 
+    status = article_status.get(article_label, {})
+    resolved_section = status.get("section_title") or section_title
+    normalized_text = normalize_for_search(text)
+    content_type = _classify_content(
+        normalized_text,
+        article_label=article_label,
+        section_title=normalize_for_search(resolved_section),
+    )
+    vigencia = status.get("vigencia", "vigente")
+    priority = _assign_priority(content_type, vigencia)
     return DocumentChunk(
         chunk_id=f"{document_id}-{chunk_number:03d}",
         document_id=document_id,
         source_title=source_title,
         text=text,
-        section_title=section_title,
+        section_title=resolved_section,
         article_label=article_label,
+        normalized_text=normalized_text,
+        tipo_contenido=content_type,
+        user_intents=_infer_user_intents(content_type, normalized_text),
+        vigencia=vigencia,
+        modificado_por=status.get("modificado_por", ""),
+        prioridad_retrieval=priority,
         metadata={
             "chunk_number": chunk_number,
-            "section_title": section_title,
+            "section_title": resolved_section,
             "article_label": article_label,
+            "change_type": status.get("change_type", ""),
         },
     )
 
@@ -286,6 +344,7 @@ def _fallback_paragraph_chunks(
     source_title: str,
     chunk_size: int,
     overlap: int,
+    article_status: dict[str, dict],
 ) -> list[DocumentChunk]:
     """Fallback splitter for non-legal or poorly structured text."""
 
@@ -309,6 +368,7 @@ def _fallback_paragraph_chunks(
                     section_title="",
                     article_label="",
                     chunk_number=chunk_number,
+                    article_status=article_status,
                 )
             )
             chunk_number += 1
@@ -327,6 +387,7 @@ def _fallback_paragraph_chunks(
                         section_title="",
                         article_label="",
                         chunk_number=chunk_number,
+                        article_status=article_status,
                     )
                 )
                 chunk_number += 1
@@ -342,7 +403,89 @@ def _fallback_paragraph_chunks(
                 section_title="",
                 article_label="",
                 chunk_number=chunk_number,
+                article_status=article_status,
             )
         )
 
     return chunks
+
+
+def _classify_content(normalized_text: str, *, article_label: str, section_title: str) -> str:
+    """Classify document evidence for citizen-oriented retrieval."""
+
+    if not article_label:
+        if "considerando" in normalized_text or "visto:" in normalized_text:
+            return "considerando"
+        if (
+            "base legal" in normalized_text
+            or "base legal" in section_title
+            or "ley organica de municipalidades" in normalized_text
+        ):
+            return "base_legal"
+    if article_label == "2" or "se entiende por" in normalized_text or "definicion" in section_title:
+        return "definicion"
+    if "requisit" in normalized_text or "presentar una solicitud" in normalized_text:
+        return "requisito"
+    if (
+        ("incumpl" in normalized_text or "no cumpla" in normalized_text)
+        and any(term in normalized_text for term in ("retiro", "revoc", "sancion"))
+    ):
+        return "sancion"
+    if "sisa" in normalized_text and any(term in normalized_text for term in ("pago", "monto", "valor", "tributo")):
+        return "costo"
+    if "zona rigida" in normalized_text or "zonas rigidas" in normalized_text or "zona prohibida" in normalized_text:
+        return "zona"
+    if "horario" in normalized_text or "06:00" in normalized_text or "23.00" in normalized_text:
+        return "horario"
+    if "prohib" in normalized_text:
+        return "prohibicion"
+    if any(term in normalized_text for term in ("sancion", "revocatoria", "decomis", "incauta")):
+        return "sancion"
+    if "procedimiento" in normalized_text or "tramite" in normalized_text:
+        return "procedimiento"
+    if "disposiciones finales" in section_title:
+        return "disposicion_final"
+    if "incorporar" in normalized_text:
+        return "incorporacion"
+    return "disposicion"
+
+
+def _infer_user_intents(content_type: str, normalized_text: str) -> list[str]:
+    by_type = {
+        "requisito": ["consulta_requisitos", "consulta_documentos"],
+        "zona": ["consulta_zonas"],
+        "horario": ["consulta_horarios"],
+        "costo": ["consulta_costos"],
+        "sancion": ["consulta_sanciones"],
+        "procedimiento": ["consulta_procedimiento"],
+        "definicion": ["consulta_ambulatorio"],
+        "prohibicion": ["consulta_sanciones"],
+    }
+    intents = list(by_type.get(content_type, ["ninguno"]))
+    if "autoriz" in normalized_text and "consulta_autorizacion" not in intents:
+        intents.append("consulta_autorizacion")
+    if "alimento" in normalized_text and "consulta_alimentos" not in intents:
+        intents.append("consulta_alimentos")
+    return intents
+
+
+def _assign_priority(content_type: str, vigencia: str) -> int:
+    if content_type in {"considerando", "base_legal"}:
+        return 0
+    if vigencia == "vigencia_no_verificable":
+        return 0
+    if vigencia in {"modificado", "derogado", "historico"}:
+        return 1
+    if content_type in {"definicion", "disposicion_transitoria", "disposicion_final"}:
+        return 2
+    if content_type in {
+        "requisito",
+        "prohibicion",
+        "procedimiento",
+        "zona",
+        "costo",
+        "horario",
+        "sancion",
+    }:
+        return 3
+    return 2

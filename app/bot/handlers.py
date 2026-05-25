@@ -4,30 +4,31 @@ from telegram import Update
 from telegram.error import TimedOut
 from telegram.ext import ContextTypes
 
-from app.bot.keyboards import build_main_keyboard
+from app.bot.keyboards import (
+    build_mode_keyboard,
+    build_mode_picker_message,
+    build_mode_selected_message,
+    is_mode_selection_message,
+    resolve_mode_from_label,
+)
 from app.channels.telegram import build_incoming_message
+from app.models.domain import AssistantMode
 
 
 MAX_TELEGRAM_MESSAGE_LEN = 3200
 
-WELCOME_MESSAGE = (
-    "Hola. Soy un asistente virtual especializado en comercio ambulatorio.\n\n"
-    "Puedo orientarte con consultas sobre requisitos, autorizaciones, modulos, "
-    "zonas rigidas, ferias, SISA y articulos de las ordenanzas 108-2012-MDP/C "
-    "y 227-2019-MDP/C.\n\n"
-    "Trabajo con memoria conversacional por chat. Si luego haces una pregunta "
-    "de seguimiento, intentare entenderla usando el contexto previo.\n\n"
-    "Si la base documental no respalda una respuesta con claridad, te lo dire "
-    "con honestidad."
-)
-
-
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start."""
 
-    if update.message is None:
+    if update.message is None or update.effective_chat is None:
         return
-    await update.message.reply_text(WELCOME_MESSAGE, reply_markup=build_main_keyboard())
+    assistant = context.application.bot_data["assistant_service"]
+    session_id = str(update.effective_chat.id)
+    active_mode = assistant.get_chat_mode("telegram", session_id)
+    await update.message.reply_text(
+        build_mode_picker_message() + f"\n\nModo actual: {assistant.describe_mode(active_mode)}.",
+        reply_markup=build_mode_keyboard(active_mode),
+    )
 
 
 async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -36,14 +37,15 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if update.message is None:
         return
     await update.message.reply_text(
-        "Puedes preguntarme, por ejemplo:\n"
-        "- Que requisitos necesito\n"
-        "- Cuanto mide un modulo\n"
-        "- Cuanto se paga de SISA\n"
-        "- Que zonas son rigidas\n"
-        "- Que dice el articulo 7\n"
-        "- Explicame la autorizacion municipal\n\n"
+        "Ahora este bot tiene dos modos:\n"
+        "- Modo General: preguntas libres\n"
+        "- Modo Comercio: consultas sobre ordenanzas de comercio ambulatorio\n\n"
         "Comandos utiles:\n"
+        "/modo para elegir o ver el modo actual\n"
+        "/modo_general para usar el modo General\n"
+        "/modo_comercio para usar el modo Comercio\n"
+        "/chat para cambiar directo al modo General\n"
+        "/pachabot para cambiar directo al modo Comercio\n"
         "/reset para borrar el contexto de este chat\n"
         "/estado para ver el modo actual del asistente"
     )
@@ -70,11 +72,64 @@ async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     assistant = context.application.bot_data["assistant_service"]
-    await _send_text_safely(update, assistant.get_runtime_status())
+    await _send_text_safely(
+        update,
+        assistant.get_runtime_status(
+            channel="telegram" if update.effective_chat else None,
+            session_id=str(update.effective_chat.id) if update.effective_chat else None,
+        ),
+    )
+
+
+async def mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the current mode and how to switch it."""
+
+    if update.message is None or update.effective_chat is None:
+        return
+
+    assistant = context.application.bot_data["assistant_service"]
+    active_mode = assistant.get_chat_mode("telegram", str(update.effective_chat.id))
+    await update.message.reply_text(
+        build_mode_picker_message()
+        + f"\n\nModo actual: {assistant.describe_mode(active_mode)}.",
+        reply_markup=build_mode_keyboard(active_mode),
+    )
+
+
+async def general_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Switch the current chat to general mode."""
+
+    await _switch_mode(update, context, AssistantMode.GENERAL)
+
+
+async def commerce_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Switch the current chat to commerce mode."""
+
+    await _switch_mode(update, context, AssistantMode.COMMERCE)
+
+
+async def chat_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Shortcut command for general chat mode."""
+
+    await _switch_mode(update, context, AssistantMode.GENERAL)
+
+
+async def pachabot_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Shortcut command for municipal commerce mode."""
+
+    await _switch_mode(update, context, AssistantMode.COMMERCE)
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Resolve user free-text messages."""
+
+    if update.message is None or update.effective_chat is None:
+        return
+
+    if is_mode_selection_message(update.message.text or ""):
+        selected_mode = resolve_mode_from_label(update.message.text or "")
+        await _switch_mode(update, context, selected_mode)
+        return
 
     incoming = build_incoming_message(update)
     if incoming is None:
@@ -101,6 +156,24 @@ async def _send_text_safely(update: Update, text: str) -> None:
             await update.message.reply_text(part)
         except TimedOut:
             await update.message.reply_text(part)
+
+
+async def _switch_mode(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    mode: AssistantMode,
+) -> None:
+    """Persist a new chat mode and confirm it to the user."""
+
+    if update.message is None or update.effective_chat is None:
+        return
+
+    assistant = context.application.bot_data["assistant_service"]
+    assistant.set_chat_mode("telegram", str(update.effective_chat.id), mode)
+    await update.message.reply_text(
+        build_mode_selected_message(mode),
+        reply_markup=build_mode_keyboard(mode),
+    )
 
 
 def _split_message(text: str, limit: int = MAX_TELEGRAM_MESSAGE_LEN) -> list[str]:

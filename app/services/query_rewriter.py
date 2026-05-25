@@ -67,11 +67,17 @@ class QueryRewriter:
         """Return a clearer search question using history when necessary."""
 
         heuristic = self._heuristic_rewrite(question, history)
-        if self.llm_service.client is None:
+        if normalize_for_search(heuristic) == normalize_for_search(question):
+            # CAMBIO FASE OLLAMA 9 — Omitir reescritura LLM para consultas autonomas.
+            # Motivo: Ollama local solo aporta valor al resolver referencias de seguimiento.
+            # Riesgo mitigado: una repregunta detectada cambia el texto heuristico y sigue esta ruta.
+            return heuristic
+
+        if self.llm_service.client is None or self._should_skip_external_rewrite():
             return heuristic
 
         try:
-            rewritten = self.llm_service.rewrite_query(question, history)
+            rewritten = self.llm_service.rewrite_query(question, history=history)
         except Exception as exc:  # pragma: no cover
             self.logger.warning("Fallo la reescritura con el proveedor externo: %s", exc)
             return heuristic
@@ -86,6 +92,17 @@ class QueryRewriter:
             return heuristic
 
         return rewritten
+
+    def _should_skip_external_rewrite(self) -> bool:
+        """Avoid spending scarce free-tier calls on query rewriting."""
+
+        if self.settings.llm_provider.lower().strip() != "openrouter":
+            return False
+
+        if self.settings.chat_model.endswith(":free"):
+            return True
+
+        return any(model.endswith(":free") for model in self.settings.chat_model_fallbacks)
 
     def _heuristic_rewrite(self, question: str, history: list[ConversationTurn]) -> str:
         """Use light conversational heuristics when no query-rewriter model is available."""

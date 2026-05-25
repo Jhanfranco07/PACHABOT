@@ -13,3 +13,8 @@ class QueryIntent(str, Enum):
     FERIAS = "ferias"
     PROHIBICIONES = "prohibiciones"
     OUT_OF_SCOPE = "out_of_scope"
+
+
+class AssistantMode(str, Enum):
+    GENERAL = "general"
+    COMMERCE = "commerce"

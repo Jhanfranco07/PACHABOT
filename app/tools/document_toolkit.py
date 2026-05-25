@@ -89,7 +89,12 @@ class DocumentToolkit:
                 if previous is None or item.score > previous.score:
                     merged[item.chunk_id] = item
 
-        final_chunks = self._finalize_chunks(question, effective_query, list(merged.values()))
+        final_chunks = self._finalize_chunks(
+            question,
+            effective_query,
+            list(merged.values()),
+            routed_query.intent,
+        )
         confidence = final_chunks[0].score if final_chunks else 0.0
         sources = list(dict.fromkeys(self._format_source(chunk) for chunk in final_chunks))
 
@@ -127,6 +132,11 @@ class DocumentToolkit:
             queries.append(f"{effective_query} definiciones")
 
         expansion = INTENT_EXPANSIONS.get(routed_query.intent)
+        if (
+            routed_query.intent == QueryIntent.PAGOS_SISA
+            and "sisa" not in normalize_for_search(f"{question} {effective_query}")
+        ):
+            expansion = None
         if expansion:
             queries.append(f"{effective_query} {expansion}")
 
@@ -137,16 +147,25 @@ class DocumentToolkit:
         question: str,
         effective_query: str,
         chunks: list[RetrievedChunk],
+        intent: QueryIntent,
     ) -> list[RetrievedChunk]:
         """Stabilize retrieved results with a light final rerank."""
 
         normalized_question = normalize_for_search(question)
+        normalized_effective_query = normalize_for_search(effective_query)
         article_match = ARTICLE_PATTERN.search(effective_query)
         article_label = article_match.group(1).upper() if article_match else ""
         asks_definition = any(
             pattern in normalized_question
             for pattern in ("que es", "defin", "se entiende", "concepto")
         )
+        strong_topic_markers = {
+            "sisa": "sisa",
+            "modulo": "modulo",
+            "feria": "feria",
+            "zona rigida": "zona rigida",
+            "autoriz": "autoriz",
+        }
 
         reranked: list[RetrievedChunk] = []
         for chunk in chunks:
@@ -161,6 +180,13 @@ class DocumentToolkit:
             ):
                 bonus += 0.20
 
+            for marker, text_marker in strong_topic_markers.items():
+                if marker in normalized_effective_query:
+                    if text_marker in normalized_text or text_marker in normalized_section:
+                        bonus += 0.90
+                    else:
+                        bonus -= 0.60
+
             reranked.append(
                 RetrievedChunk(
                     chunk_id=chunk.chunk_id,
@@ -170,11 +196,81 @@ class DocumentToolkit:
                     score=chunk.score + bonus,
                     section_title=chunk.section_title,
                     article_label=chunk.article_label,
+                    normalized_text=chunk.normalized_text,
+                    tipo_contenido=chunk.tipo_contenido,
+                    user_intents=chunk.user_intents,
+                    vigencia=chunk.vigencia,
+                    modificado_por=chunk.modificado_por,
+                    prioridad_retrieval=chunk.prioridad_retrieval,
                     metadata=chunk.metadata,
                 )
             )
 
         reranked.sort(key=lambda item: item.score, reverse=True)
+
+        # CAMBIO FASE OLLAMA 5 — Exigir evidencia monetaria para responder costos.
+        # Motivo: una coincidencia con la palabra tramite no acredita un precio vigente.
+        # Riesgo mitigado: las consultas explicitas de SISA conservan sus chunks de monto.
+        if intent == QueryIntent.PAGOS_SISA:
+            topic_text = normalize_for_search(f"{question} {effective_query}")
+            if "sisa" not in topic_text and not any(
+                topic in topic_text for topic in ("autoriz", "permiso", "feria", "modulo")
+            ):
+                return []
+
+            cost_chunks = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido == "costo"
+                or (
+                    any(
+                        marker in normalize_for_search(chunk.text)
+                        for marker in ("sisa", "monto", "tasa", "costo", "s/.", "s/")
+                    )
+                )
+            ]
+            if "sisa" not in topic_text:
+                subject_markers = [
+                    topic
+                    for topic in ("autoriz", "permiso", "feria", "modulo")
+                    if topic in topic_text
+                ]
+                cost_chunks = [
+                    chunk
+                    for chunk in cost_chunks
+                    if any(
+                        marker in normalize_for_search(f"{chunk.section_title} {chunk.text}")
+                        for marker in subject_markers
+                    )
+                ]
+            return cost_chunks[: self.settings.retrieval_top_k]
+
+        if intent == QueryIntent.REQUISITOS:
+            current_authorization_requirements = [
+                chunk
+                for chunk in reranked
+                if chunk.article_label == "30"
+                and chunk.tipo_contenido == "requisito"
+                and chunk.vigencia == "vigente"
+            ]
+            if current_authorization_requirements:
+                # CAMBIO FASE OLLAMA 7 — Acotar requisitos a la norma modificatoria recuperada.
+                # Motivo: evitar que el LLM mezcle requisitos con ubicaciones o tramites secundarios.
+                # Riesgo mitigado: solo se activa cuando ya existe el Articulo 30 vigente.
+                return current_authorization_requirements[:1]
+
+        if asks_definition:
+            current_definitions = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido == "definicion" and chunk.vigencia == "vigente"
+            ]
+            if current_definitions:
+                # CAMBIO FASE OLLAMA 8 — Responder definiciones solo con definiciones vigentes.
+                # Motivo: una definicion ciudadana no debe derivarse de requisitos secundarios.
+                # Riesgo mitigado: solo se filtra cuando ya se recupero evidencia definitoria.
+                return current_definitions[: self.settings.retrieval_top_k]
+
         return reranked[: self.settings.retrieval_top_k]
 
     def _format_source(self, chunk: RetrievedChunk) -> str:
@@ -185,6 +281,7 @@ class DocumentToolkit:
             parts.append(f"Art. {chunk.article_label}")
         elif chunk.section_title:
             parts.append(chunk.section_title)
+        parts.append(f"Estado: {chunk.vigencia.upper()}")
         return " | ".join(parts)
 
     def _correct_spelling(self, question: str) -> str:

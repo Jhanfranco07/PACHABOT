@@ -140,6 +140,10 @@ class RetrievalService:
 
         effective_query = self._expand_query_with_history(query, history or [])
         normalized_query = normalize_for_search(effective_query)
+        historical_query = any(
+            marker in normalized_query
+            for marker in ("historico", "version anterior", "antes de la modificacion", "texto anterior")
+        )
         query_tokens = self._extract_query_tokens(normalized_query)
         article_match = ARTICLE_QUERY_PATTERN.search(query)
         article_label = article_match.group(1).upper() if article_match else ""
@@ -150,10 +154,17 @@ class RetrievalService:
         char_scores = cosine_similarity(char_query_vector, self.char_matrix).flatten()
         combined_scores = (word_scores * 0.72) + (char_scores * 0.28)
 
-        ranked_indices = combined_scores.argsort()[::-1][: max(top_k * 3, 10)]
+        # CAMBIO FASE 7.2 — Excluir ruido documental e historicos de la respuesta ordinaria.
+        # Motivo: los considerandos y textos reemplazados no deben orientar al ciudadano.
+        # Riesgo mitigado: una consulta explicita sobre version historica aun puede recuperarlos.
+        ranked_indices = combined_scores.argsort()[::-1]
         candidates: list[RetrievedChunk] = []
         for index in ranked_indices:
             chunk = self.chunks[index]
+            if chunk.prioridad_retrieval <= 0:
+                continue
+            if not historical_query and chunk.vigencia in {"historico", "modificado", "derogado"}:
+                continue
             score = float(combined_scores[index]) + self._metadata_bonus(
                 chunk,
                 query_tokens=query_tokens,
@@ -172,6 +183,12 @@ class RetrievalService:
                     score=score,
                     section_title=chunk.section_title,
                     article_label=chunk.article_label,
+                    normalized_text=chunk.normalized_text,
+                    tipo_contenido=chunk.tipo_contenido,
+                    user_intents=chunk.user_intents,
+                    vigencia=chunk.vigencia,
+                    modificado_por=chunk.modificado_por,
+                    prioridad_retrieval=chunk.prioridad_retrieval,
                     metadata=chunk.metadata,
                 )
             )
@@ -204,6 +221,8 @@ class RetrievalService:
             chunk.source_title,
             chunk.section_title,
             f"Articulo {chunk.article_label}" if chunk.article_label else "",
+            chunk.tipo_contenido,
+            " ".join(chunk.user_intents),
             chunk.text,
         ]
         return "\n".join(part for part in parts if part)
@@ -252,6 +271,26 @@ class RetrievalService:
         normalized_text = normalize_for_search(chunk.text)
         normalized_section = normalize_for_search(chunk.section_title)
         bonus = 0.0
+
+        if chunk.vigencia == "vigente":
+            bonus += 0.55
+        bonus += max(0, chunk.prioridad_retrieval - 1) * 0.18
+
+        if any(term in normalized_query for term in ("documento", "requisit", "que necesito")):
+            if chunk.tipo_contenido == "requisito":
+                bonus += 0.85
+            if chunk.article_label == "30" and chunk.vigencia == "vigente":
+                bonus += 1.10
+        if "cuanto dura" in normalized_query or "vigencia" in normalized_query or "renovacion" in normalized_query:
+            if "vigencia" in normalized_text or "plazo" in normalized_text:
+                bonus += 0.75
+            if chunk.article_label == "5" and chunk.vigencia == "vigente":
+                bonus += 0.90
+        if "zona" in normalized_query or ("donde" in normalized_query and "vender" in normalized_query):
+            if chunk.tipo_contenido in {"zona", "prohibicion"}:
+                bonus += 0.90
+            if chunk.article_label in {"13", "17.4"} and chunk.vigencia == "vigente":
+                bonus += 0.90
 
         if article_label and chunk.article_label and chunk.article_label.upper() == article_label:
             bonus += 2.00

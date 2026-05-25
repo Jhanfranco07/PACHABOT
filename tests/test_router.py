@@ -27,3 +27,19 @@ def test_router_accepts_natural_municipal_case_without_exact_keywords() -> None:
     router = QueryRouter()
     routed = router.route("Puedo poner una carretilla para vender en la calle")
     assert routed.in_domain is True
+
+
+def test_router_identifies_where_selling_is_forbidden_as_zone_query() -> None:
+    router = QueryRouter()
+    routed = router.route("Donde no puedo vender")
+
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.ZONAS_RIGIDAS
+
+
+def test_router_treats_exact_cost_question_as_payment_evidence_query() -> None:
+    router = QueryRouter()
+    routed = router.route("Cuanto cuesta exactamente este tramite actualmente?")
+
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.PAGOS_SISA

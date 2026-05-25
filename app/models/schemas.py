@@ -15,6 +15,15 @@ class DocumentChunk:
     text: str
     section_title: str = ""
     article_label: str = ""
+    # CAMBIO FASE 7.1 — Extender la evidencia con metadatos normativos recuperables.
+    # Motivo: impedir que texto historico o de bajo valor compita con norma vigente.
+    # Riesgo mitigado: los valores por defecto mantienen compatibles los chunks existentes.
+    normalized_text: str = ""
+    tipo_contenido: str = "disposicion"
+    user_intents: list[str] = field(default_factory=lambda: ["ninguno"])
+    vigencia: str = "vigente"
+    modificado_por: str = ""
+    prioridad_retrieval: int = 2
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -27,6 +36,12 @@ class RetrievedChunk:
     score: float
     section_title: str = ""
     article_label: str = ""
+    normalized_text: str = ""
+    tipo_contenido: str = "disposicion"
+    user_intents: list[str] = field(default_factory=lambda: ["ninguno"])
+    vigencia: str = "vigente"
+    modificado_por: str = ""
+    prioridad_retrieval: int = 2
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

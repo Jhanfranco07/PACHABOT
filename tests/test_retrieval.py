@@ -1,11 +1,22 @@
+from pathlib import Path
+
 from app.config import get_settings
 from app.core.logger import setup_logging
 from app.models.schemas import DocumentChunk
 from app.services.retrieval_service import RetrievalService
 
 
-def test_retrieval_returns_relevant_chunk() -> None:
+def _isolated_settings(tmp_path: Path):
     settings = get_settings()
+    settings.vectorstore_dir = tmp_path / "vectorstore"
+    settings.processed_chunks_file = tmp_path / "processed" / "chunks.json"
+    settings.vectorizer_file = tmp_path / "vectorstore" / "tfidf_vectorizer.joblib"
+    settings.matrix_file = tmp_path / "vectorstore" / "tfidf_matrix.joblib"
+    return settings
+
+
+def test_retrieval_returns_relevant_chunk(tmp_path: Path) -> None:
+    settings = _isolated_settings(tmp_path)
     logger = setup_logging("INFO")
     service = RetrievalService(settings, logger)
     chunks = [
@@ -35,8 +46,8 @@ def test_retrieval_returns_relevant_chunk() -> None:
     assert results[0].document_id == "ordenanza_108_2012"
 
 
-def test_retrieval_prioritizes_exact_article_match() -> None:
-    settings = get_settings()
+def test_retrieval_prioritizes_exact_article_match(tmp_path: Path) -> None:
+    settings = _isolated_settings(tmp_path)
     logger = setup_logging("INFO")
     service = RetrievalService(settings, logger)
     chunks = [
@@ -66,8 +77,8 @@ def test_retrieval_prioritizes_exact_article_match() -> None:
     assert results[0].article_label == "7"
 
 
-def test_retrieval_prefers_definition_over_preamble() -> None:
-    settings = get_settings()
+def test_retrieval_prefers_definition_over_preamble(tmp_path: Path) -> None:
+    settings = _isolated_settings(tmp_path)
     logger = setup_logging("INFO")
     service = RetrievalService(settings, logger)
     chunks = [
@@ -95,3 +106,91 @@ def test_retrieval_prefers_definition_over_preamble() -> None:
 
     assert results
     assert results[0].section_title.startswith("TÍTULO I")
+
+
+def test_chunks_prioridad_cero_no_aparecen_en_resultados(tmp_path: Path) -> None:
+    settings = _isolated_settings(tmp_path)
+    service = RetrievalService(settings, setup_logging("INFO"))
+    service.build_index(
+        [
+            DocumentChunk(
+                chunk_id="noise",
+                document_id="doc",
+                source_title="Ordenanza",
+                text="CONSIDERANDO requisitos documentos comercio ambulatorio.",
+                tipo_contenido="considerando",
+                prioridad_retrieval=0,
+            ),
+            DocumentChunk(
+                chunk_id="valid",
+                document_id="doc",
+                source_title="Ordenanza",
+                text="Artículo 30. Presentar documentos para obtener autorización.",
+                article_label="30",
+                tipo_contenido="requisito",
+                vigencia="vigente",
+                prioridad_retrieval=3,
+            ),
+        ]
+    )
+
+    results = service.search("Qué documentos necesito para comercio ambulatorio", top_k=2)
+
+    assert results
+    assert all(result.prioridad_retrieval > 0 for result in results)
+    assert results[0].chunk_id == "valid"
+
+
+def test_consulta_vigente_no_devuelve_historicos_como_primero(tmp_path: Path) -> None:
+    service = RetrievalService(_isolated_settings(tmp_path), setup_logging("INFO"))
+    service.build_index(
+        [
+            DocumentChunk(
+                chunk_id="old",
+                document_id="ordenanza_108_2012",
+                source_title="Ordenanza 108-2012-MDP/C",
+                text="Artículo 5. La autorización tiene una vigencia anterior.",
+                article_label="5",
+                tipo_contenido="procedimiento",
+                vigencia="historico",
+                prioridad_retrieval=1,
+            ),
+            DocumentChunk(
+                chunk_id="current",
+                document_id="ordenanza_227_2019",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text="Artículo 5. El plazo de vigencia de la autorización es un año.",
+                article_label="5",
+                tipo_contenido="procedimiento",
+                vigencia="vigente",
+                prioridad_retrieval=3,
+            ),
+        ]
+    )
+
+    results = service.search("Cuánto dura la autorización", top_k=2)
+
+    assert results[0].chunk_id == "current"
+    assert all(result.vigencia != "historico" for result in results)
+
+
+def test_consulta_zonas_devuelve_articulo_con_zona(tmp_path: Path) -> None:
+    service = RetrievalService(_isolated_settings(tmp_path), setup_logging("INFO"))
+    service.build_index(
+        [
+            DocumentChunk(
+                chunk_id="zone",
+                document_id="ordenanza_108_2012",
+                source_title="Ordenanza 108-2012-MDP/C",
+                text="Artículo 13. Son zonas rígidas aquellas donde no se autoriza vender.",
+                article_label="13",
+                tipo_contenido="zona",
+                vigencia="vigente",
+                prioridad_retrieval=3,
+            ),
+        ]
+    )
+
+    results = service.search("Dónde no puedo vender", top_k=1)
+
+    assert results[0].tipo_contenido in {"zona", "prohibicion"}

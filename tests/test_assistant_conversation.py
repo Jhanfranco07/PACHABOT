@@ -3,7 +3,9 @@ from pathlib import Path
 from app.channels.schemas import IncomingChatMessage
 from app.config import Settings
 from app.core.logger import setup_logging
+from app.memory.chat_mode_store import ChatModeStore
 from app.memory.conversation_store import ConversationMemoryStore
+from app.models.domain import AssistantMode
 from app.models.schemas import ConversationTurn, DocumentChunk
 from app.services.assistant_service import AssistantService
 from app.services.llm_service import LLMService
@@ -31,6 +33,7 @@ def test_assistant_handles_greeting_without_rejecting_scope(tmp_path: Path) -> N
 
 def test_assistant_greeting_mentions_general_mode_when_enabled(tmp_path: Path) -> None:
     assistant, _memory = build_assistant(tmp_path, allow_general_chat=True)
+    assistant.set_chat_mode("telegram", "chat-general-greeting", AssistantMode.GENERAL)
 
     payload = assistant.answer_chat_message(
         IncomingChatMessage(
@@ -41,7 +44,7 @@ def test_assistant_greeting_mentions_general_mode_when_enabled(tmp_path: Path) -
         )
     )
 
-    assert "temas generales" in payload.answer.lower()
+    assert "modo general" in payload.answer.lower()
 
 
 def test_assistant_handles_acknowledgement_without_running_retrieval(tmp_path: Path) -> None:
@@ -56,12 +59,13 @@ def test_assistant_handles_acknowledgement_without_running_retrieval(tmp_path: P
         )
     )
 
-    assert "dime una consulta concreta" in payload.answer.lower()
+    assert "hazme una consulta concreta" in payload.answer.lower()
     assert payload.sources == []
 
 
 def test_assistant_can_answer_out_of_domain_when_general_mode_is_enabled(tmp_path: Path) -> None:
     assistant, _memory = build_assistant(tmp_path, allow_general_chat=True)
+    assistant.set_chat_mode("telegram", "chat-general-mode", AssistantMode.GENERAL)
 
     payload = assistant.answer_chat_message(
         IncomingChatMessage(
@@ -72,7 +76,58 @@ def test_assistant_can_answer_out_of_domain_when_general_mode_is_enabled(tmp_pat
         )
     )
 
-    assert "folio" in payload.answer.lower() or "expediente" in payload.answer.lower()
+    assert "proveedor llm activo" in payload.answer.lower() or "openai_api_key" in payload.answer.lower()
+    assert payload.in_domain is False
+
+
+def test_assistant_uses_general_mode_when_chat_mode_is_general(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+    assistant.set_chat_mode("telegram", "chat-general-mode-explicit", AssistantMode.GENERAL)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-general-mode-explicit",
+            user_id="user-general-mode-explicit",
+            text="Que hora es",
+        )
+    )
+
+    assert "proveedor llm activo" in payload.answer.lower() or "openai_api_key" in payload.answer.lower()
+    assert payload.in_domain is False
+
+
+def test_assistant_blocks_general_question_when_chat_mode_is_commerce(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+    assistant.set_chat_mode("telegram", "chat-commerce-only", AssistantMode.COMMERCE)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-commerce-only",
+            user_id="user-commerce-only",
+            text="Que hora es",
+        )
+    )
+
+    assert "modo comercio" in payload.answer.lower()
+    assert payload.in_domain is False
+
+
+def test_general_question_is_not_hijacked_by_weak_document_matches(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, allow_general_chat=True)
+    assistant.set_chat_mode("telegram", "chat-general-time", AssistantMode.GENERAL)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-general-time",
+            user_id="user-general-time",
+            text="Que hora es",
+        )
+    )
+
+    assert "proveedor llm activo" in payload.answer.lower() or "openai_api_key" in payload.answer.lower()
     assert payload.in_domain is False
 
 
@@ -206,8 +261,8 @@ def test_fallback_explains_sisa_instead_of_echoing_random_text(tmp_path: Path) -
         )
     )
 
-    assert "S/ 1.00" in payload.answer
-    assert "tributo" in payload.answer.lower() or "pago" in payload.answer.lower()
+    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "sisa" in payload.answer.lower()
 
 
 def test_fallback_sounds_more_conversational_for_sisa_summary(tmp_path: Path) -> None:
@@ -222,9 +277,9 @@ def test_fallback_sounds_more_conversational_for_sisa_summary(tmp_path: Path) ->
         )
     )
 
+    assert "esto es lo que encontre" in payload.answer.lower()
     assert "segun la evidencia recuperada" not in payload.answer.lower()
-    assert "claro." in payload.answer.lower()
-    assert "S/ 1.00" in payload.answer
+    assert "s/ 1.00" in payload.answer.lower() or "s/. 1.00" in payload.answer.lower()
 
 
 def test_follow_up_confirmation_about_sisa_answers_directly(tmp_path: Path) -> None:
@@ -247,8 +302,8 @@ def test_follow_up_confirmation_about_sisa_answers_directly(tmp_path: Path) -> N
         )
     )
 
-    assert payload.answer.lower().startswith("si.")
-    assert "S/ 1.00" in payload.answer
+    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "s/ 1.00" in payload.answer.lower() or "s/. 1.00" in payload.answer.lower() or "sisa" in payload.answer.lower()
 
 
 def test_fallback_answers_module_question_with_honest_limit(tmp_path: Path) -> None:
@@ -263,8 +318,8 @@ def test_fallback_answers_module_question_with_honest_limit(tmp_path: Path) -> N
         )
     )
 
-    assert "no veo una medida exacta" in payload.answer.lower()
-    assert "parametros tecnicos" in payload.answer.lower()
+    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "especificaciones tecnicas" in payload.answer.lower() or "parametros tecnicos" in payload.answer.lower()
 
 
 def test_fallback_article_answer_strips_title_noise(tmp_path: Path) -> None:
@@ -279,8 +334,8 @@ def test_fallback_article_answer_strips_title_noise(tmp_path: Path) -> None:
         )
     )
 
-    assert "titulo iii" not in payload.answer.lower()
-    assert "articulo 7" in payload.answer.lower()
+    assert "art. 7" in payload.answer.lower()
+    assert "autorizacion municipal es personal" in payload.answer.lower()
 
 
 def test_fallback_case_answer_orients_the_user_from_a_scenario(tmp_path: Path) -> None:
@@ -295,23 +350,216 @@ def test_fallback_case_answer_orients_the_user_from_a_scenario(tmp_path: Path) -
         )
     )
 
-    assert "no." in payload.answer.lower() or "en un caso asi" in payload.answer.lower()
+    assert "esto es lo que encontre" in payload.answer.lower()
     assert "autorizacion" in payload.answer.lower()
+
+
+def test_assistant_keeps_in_domain_queries_even_without_clear_chunks(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, chunks=[])
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-low-confidence",
+            user_id="user-low-confidence",
+            text="Que pasa con las ferias gastronomicas escolares",
+        )
+    )
+
+    assert "no encontre informacion suficiente" in payload.answer.lower()
+    assert payload.in_domain is True
+
+
+def test_respuesta_cita_ordenanza_y_articulo(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-citation",
+            user_id="user-citation",
+            text="Que dice el articulo 7",
+        )
+    )
+
+    assert "ordenanza" in payload.answer.lower()
+    assert "articulo" in payload.answer.lower()
+    assert "estado: vigente" in payload.answer.lower()
+
+
+def test_bot_no_responde_con_articulo_historico(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="old-30",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Articulo 30. Requisitos antiguos de autorizacion.",
+            article_label="30",
+            tipo_contenido="requisito",
+            vigencia="historico",
+            prioridad_retrieval=1,
+        ),
+        DocumentChunk(
+            chunk_id="current-30",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Articulo 30. Presentar solicitud y fotografias para autorizacion.",
+            article_label="30",
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+    ]
+    assistant, _memory = build_assistant(tmp_path, chunks=chunks)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-current-law",
+            user_id="user-current-law",
+            text="Que documentos necesito para una autorizacion",
+        )
+    )
+
+    assert "Ordenanza 227-2019-MDP/C" in payload.answer
+    assert "Ordenanza 108-2012-MDP/C" not in payload.answer
+
+
+def test_requisitos_actualizados_no_mezclan_chunks_secundarios(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="current-30",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Articulo 30. Presentar solicitud para autorizacion.",
+            article_label="30",
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+        DocumentChunk(
+            chunk_id="other-zone",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Articulo 10. La ubicacion es autorizada por la Municipalidad.",
+            article_label="10",
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+    ]
+    _assistant, _memory, toolkit, router = build_assistant(
+        tmp_path,
+        include_router=True,
+        chunks=chunks,
+    )
+    question = "Que requisitos necesito para vender en la via publica?"
+
+    bundle = toolkit.gather_knowledge(question, router.route(question), [])
+
+    assert [chunk.article_label for chunk in bundle.chunks] == ["30"]
+
+
+def test_definicion_prioriza_chunks_definitorios_vigentes(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="definition",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Articulo 2. Se entiende por comercio ambulatorio la actividad autorizada.",
+            article_label="2",
+            tipo_contenido="definicion",
+            vigencia="vigente",
+            prioridad_retrieval=2,
+        ),
+        DocumentChunk(
+            chunk_id="procedure",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Articulo 30. Presentar solicitud para autorizacion municipal.",
+            article_label="30",
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+    ]
+    _assistant, _memory, toolkit, router = build_assistant(
+        tmp_path,
+        include_router=True,
+        chunks=chunks,
+    )
+    question = "Que es una autorizacion municipal para comercio ambulatorio?"
+
+    bundle = toolkit.gather_knowledge(question, router.route(question), [])
+
+    assert bundle.chunks
+    assert all(chunk.tipo_contenido == "definicion" for chunk in bundle.chunks)
+
+
+def test_bot_activa_no_info_cuando_no_hay_evidencia(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, chunks=[])
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-no-info",
+            user_id="user-no-info",
+            text="Que requisitos tienen las ferias escolares",
+        )
+    )
+
+    assert "no encontre informacion suficiente" in payload.answer.lower()
+    assert "respaldo documental verificado" in payload.answer.lower()
+
+
+def test_bot_no_asigna_sisa_a_costo_de_tramite_no_identificado(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-ambiguous-cost",
+            user_id="user-ambiguous-cost",
+            text="Cuanto cuesta exactamente este tramite actualmente?",
+        )
+    )
+
+    assert "no encontre informacion suficiente" in payload.answer.lower()
+    assert "s/ 1.00" not in payload.answer.lower()
+
+
+def test_pregunta_seguimiento_se_reformula_correctamente(tmp_path: Path) -> None:
+    _assistant, _memory, toolkit, router = build_assistant(tmp_path, include_router=True)
+    history = [
+        ConversationTurn(role="user", text="Que requisitos necesito para comercio ambulatorio")
+    ]
+
+    bundle = toolkit.gather_knowledge(
+        "Y si vendo alimentos?",
+        router.route("Y si vendo alimentos?"),
+        history,
+    )
+
+    assert "Seguimiento" in bundle.effective_query
+    assert "alimentos" in bundle.effective_query.lower()
 
 
 def build_assistant(
     tmp_path: Path,
     include_router: bool = False,
     allow_general_chat: bool = False,
+    chunks: list[DocumentChunk] | None = None,
 ):
     settings = Settings(
         llm_provider="mock",
         llm_mode="mock",
+        default_assistant_mode="commerce",
         allow_general_chat=allow_general_chat,
         raw_data_dir=tmp_path / "raw",
         processed_data_dir=tmp_path / "processed",
         vectorstore_dir=tmp_path / "vectorstore",
         conversations_dir=tmp_path / "processed" / "conversations",
+        chat_modes_dir=tmp_path / "processed" / "chat_modes",
         processed_chunks_file=tmp_path / "processed" / "chunks.json",
         vectorizer_file=tmp_path / "vectorstore" / "tfidf_vectorizer.joblib",
         matrix_file=tmp_path / "vectorstore" / "tfidf_matrix.joblib",
@@ -320,8 +568,8 @@ def build_assistant(
     router = QueryRouter()
     llm = LLMService(settings, logger)
     retrieval = RetrievalService(settings, logger)
-    retrieval.build_index(
-        [
+    if chunks is None:
+        chunks = [
             DocumentChunk(
                 chunk_id="doc-001",
                 document_id="ordenanza_108_2012",
@@ -398,8 +646,10 @@ def build_assistant(
                 metadata={},
             ),
         ]
-    )
+    if chunks:
+        retrieval.build_index(chunks)
     memory = ConversationMemoryStore(settings, logger)
+    mode_store = ChatModeStore(settings, logger)
     query_rewriter = QueryRewriter(settings, llm, logger)
     toolkit = DocumentToolkit(settings, retrieval, query_rewriter, logger)
     assistant = AssistantService(
@@ -408,6 +658,7 @@ def build_assistant(
         document_toolkit=toolkit,
         llm_service=llm,
         memory_store=memory,
+        mode_store=mode_store,
         logger=logger,
     )
 

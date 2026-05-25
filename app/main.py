@@ -13,7 +13,9 @@ from app.api.schemas import (
 from app.channels.schemas import IncomingChatMessage
 from app.config import Settings, get_settings
 from app.core.logger import setup_logging
+from app.memory.chat_mode_store import ChatModeStore
 from app.memory.conversation_store import ConversationMemoryStore
+from app.models.domain import AssistantMode
 from app.services.assistant_service import AssistantService
 from app.services.document_service import DocumentService
 from app.services.llm_service import LLMService
@@ -30,6 +32,7 @@ class AppContainer:
     document_service: DocumentService
     retrieval_service: RetrievalService
     memory_store: ConversationMemoryStore
+    mode_store: ChatModeStore
     document_toolkit: DocumentToolkit
     query_rewriter: QueryRewriter
 
@@ -45,6 +48,7 @@ def build_container() -> AppContainer:
     retrieval_service = RetrievalService(settings, logger)
     retrieval_service.load_index()
     memory_store = ConversationMemoryStore(settings, logger)
+    mode_store = ChatModeStore(settings, logger)
     query_rewriter = QueryRewriter(settings, llm_service, logger)
     document_toolkit = DocumentToolkit(settings, retrieval_service, query_rewriter, logger)
     document_service = DocumentService(settings, logger)
@@ -54,6 +58,7 @@ def build_container() -> AppContainer:
         document_toolkit=document_toolkit,
         llm_service=llm_service,
         memory_store=memory_store,
+        mode_store=mode_store,
         logger=logger,
     )
     return AppContainer(
@@ -62,6 +67,7 @@ def build_container() -> AppContainer:
         document_service=document_service,
         retrieval_service=retrieval_service,
         memory_store=memory_store,
+        mode_store=mode_store,
         document_toolkit=document_toolkit,
         query_rewriter=query_rewriter,
     )
@@ -99,6 +105,12 @@ def info() -> dict[str, object]:
 def chat(payload: ChatRequest) -> ChatResponse:
     """Channel-agnostic endpoint to test the assistant outside Telegram."""
 
+    if payload.mode:
+        container.assistant_service.set_chat_mode(
+            payload.channel,
+            payload.session_id,
+            AssistantMode(payload.mode.lower().strip()),
+        )
     result = container.assistant_service.answer_chat_message(
         IncomingChatMessage(
             channel=payload.channel,
@@ -116,6 +128,7 @@ def chat(payload: ChatRequest) -> ChatResponse:
         in_domain=result.in_domain,
         confidence=result.confidence,
         used_llm=result.used_llm,
+        mode=container.assistant_service.get_chat_mode(payload.channel, payload.session_id).value,
     )
 
 

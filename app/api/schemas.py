@@ -10,6 +10,7 @@ class ChatRequest(BaseModel):
     session_id: str = "api-session"
     user_id: str = "api-user"
     text: str = Field(min_length=1)
+    mode: str | None = None
     user_display_name: str = ""
     metadata: dict[str, str] = Field(default_factory=dict)
 
@@ -23,6 +24,7 @@ class ChatResponse(BaseModel):
     in_domain: bool
     confidence: float
     used_llm: bool
+    mode: str
 
 
 class ConversationResetRequest(BaseModel):

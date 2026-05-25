@@ -5,8 +5,13 @@ import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from app.bot.handlers import (
+    chat_mode_handler,
+    commerce_mode_handler,
+    general_mode_handler,
     help_handler,
     message_handler,
+    mode_handler,
+    pachabot_mode_handler,
     reset_handler,
     start_handler,
     status_handler,
@@ -34,6 +39,11 @@ def build_telegram_application(
 
     app.add_handler(CommandHandler("start", start_handler))
     app.add_handler(CommandHandler("help", help_handler))
+    app.add_handler(CommandHandler("modo", mode_handler))
+    app.add_handler(CommandHandler("modo_general", general_mode_handler))
+    app.add_handler(CommandHandler("modo_comercio", commerce_mode_handler))
+    app.add_handler(CommandHandler("chat", chat_mode_handler))
+    app.add_handler(CommandHandler("pachabot", pachabot_mode_handler))
     app.add_handler(CommandHandler("reset", reset_handler))
     app.add_handler(CommandHandler("estado", status_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))

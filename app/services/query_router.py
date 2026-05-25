@@ -33,7 +33,14 @@ INTENT_HINTS: dict[QueryIntent, tuple[str, ...]] = {
     QueryIntent.REQUISITOS: ("requisito", "requisitos", "solicitar", "tramite", "documentos", "que necesito"),
     QueryIntent.MODULOS: ("modulo", "medida", "dimensiones", "tamano", "puesto"),
     QueryIntent.PAGOS_SISA: ("sisa", "pago", "cuota", "monto", "tasa", "cuanto cuesta"),
-    QueryIntent.ZONAS_RIGIDAS: ("zona rigida", "zonas rigidas", "zona prohibida", "restriccion de zona"),
+    QueryIntent.ZONAS_RIGIDAS: (
+        "zona rigida",
+        "zonas rigidas",
+        "zona prohibida",
+        "restriccion de zona",
+        "donde no puedo vender",
+        "donde puedo vender",
+    ),
     QueryIntent.AUTORIZACIONES: ("autorizacion", "permiso", "vigencia", "renovacion", "puedo vender"),
     QueryIntent.FERIAS: ("feria", "ferias", "eventual", "temporal"),
     QueryIntent.PROHIBICIONES: ("prohibido", "prohibiciones", "impedido", "restriccion", "sancion"),
@@ -90,6 +97,17 @@ class QueryRouter:
             if score > best_score:
                 best_intent = intent
                 best_score = score
+
+        # CAMBIO FASE OLLAMA 4 — Separar preguntas de costo de requisitos generales.
+        # Motivo: un costo exacto requiere evidencia monetaria, no cualquier tramite relacionado.
+        # Riesgo mitigado: las consultas SISA existentes conservan el mismo intent.
+        if any(
+            _contains_keyword(normalized, marker)
+            for marker in ("cuanto cuesta", "costo", "tasa", "monto", "sisa")
+        ):
+            if intent_scores[QueryIntent.PAGOS_SISA] > 0:
+                best_intent = QueryIntent.PAGOS_SISA
+                best_score = intent_scores[QueryIntent.PAGOS_SISA]
 
         in_domain = domain_score > 0 or best_score > 0
         if not in_domain:
