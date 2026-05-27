@@ -31,6 +31,56 @@ def test_assistant_handles_greeting_without_rejecting_scope(tmp_path: Path) -> N
     assert "comercio ambulatorio" in payload.answer.lower()
 
 
+def test_assistant_handles_greeting_with_punctuation_without_llm(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="web",
+            session_id="chat-greeting-punctuation",
+            user_id="user-greeting-punctuation",
+            text="Hola, buenas tardes",
+        )
+    )
+
+    assert payload.in_domain is True
+    assert payload.used_llm is False
+    assert payload.response_origin == "system"
+    assert "comercio ambulatorio" in payload.answer.lower()
+
+
+def test_greeting_prefix_does_not_hide_municipal_question(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="web",
+            session_id="chat-greeting-plus-question",
+            user_id="user-greeting-plus-question",
+            text="Hola, quiero saber que es comercio ambulatorio",
+        )
+    )
+
+    assert payload.response_origin != "system"
+    assert payload.sources
+
+
+def test_que_tal_with_ambulatorio_question_is_not_only_a_greeting(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="web",
+            session_id="chat-que-tal-plus-question",
+            user_id="user-que-tal-plus-question",
+            text="Que tal, consulta, quiero saber que es ser ambulatorio",
+        )
+    )
+
+    assert payload.response_origin != "system"
+    assert payload.in_domain is True
+
+
 def test_assistant_greeting_mentions_general_mode_when_enabled(tmp_path: Path) -> None:
     assistant, _memory = build_assistant(tmp_path, allow_general_chat=True)
     assistant.set_chat_mode("telegram", "chat-general-greeting", AssistantMode.GENERAL)
@@ -367,6 +417,7 @@ def test_assistant_keeps_in_domain_queries_even_without_clear_chunks(tmp_path: P
     )
 
     assert "no encontre informacion suficiente" in payload.answer.lower()
+    assert "respaldo documental verificado" in payload.answer.lower()
     assert payload.in_domain is True
 
 
@@ -460,6 +511,46 @@ def test_requisitos_actualizados_no_mezclan_chunks_secundarios(tmp_path: Path) -
     assert [chunk.article_label for chunk in bundle.chunks] == ["30"]
 
 
+def test_consulta_de_ordenanza_usa_norma_base_y_modificatoria(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="base-title",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="ORDENANZA QUE REGLAMENTA EL COMERCIO AMBULATORIO Y FERIAL EN EL DISTRITO.",
+            tipo_contenido="disposicion",
+            prioridad_retrieval=2,
+        ),
+        DocumentChunk(
+            chunk_id="mod-title",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="ORDENANZA MODIFICATORIA DE LA ORDENANZA N° 108-2012-MDP/C.",
+            tipo_contenido="considerando",
+            prioridad_retrieval=0,
+        ),
+        DocumentChunk(
+            chunk_id="noise",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Articulo 12. Se determinan zonas reguladas.",
+            article_label="12",
+            tipo_contenido="zona",
+            prioridad_retrieval=3,
+        ),
+    ]
+    _assistant, _memory, toolkit, router = build_assistant(
+        tmp_path,
+        include_router=True,
+        chunks=chunks,
+    )
+    question = "Cual es la ordenanza de comercio ambulatorio"
+
+    bundle = toolkit.gather_knowledge(question, router.route(question), [])
+
+    assert {chunk.chunk_id for chunk in bundle.chunks} == {"base-title", "mod-title"}
+
+
 def test_definicion_prioriza_chunks_definitorios_vigentes(tmp_path: Path) -> None:
     chunks = [
         DocumentChunk(
@@ -524,7 +615,8 @@ def test_bot_no_asigna_sisa_a_costo_de_tramite_no_identificado(tmp_path: Path) -
         )
     )
 
-    assert "no encontre informacion suficiente" in payload.answer.lower()
+    assert "costo exacto actualizado" in payload.answer.lower()
+    assert "tupa vigente" in payload.answer.lower()
     assert "s/ 1.00" not in payload.answer.lower()
 
 

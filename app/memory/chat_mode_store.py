@@ -21,6 +21,8 @@ class ChatModeStore:
 
         path = self._build_session_path(channel, session_id)
         if not path.exists():
+            path = self._build_legacy_session_path(channel, session_id)
+        if not path.exists():
             return self._default_mode()
 
         try:
@@ -51,9 +53,12 @@ class ChatModeStore:
     def reset_mode(self, channel: str, session_id: str) -> None:
         """Delete the stored mode for a session if it exists."""
 
-        path = self._build_session_path(channel, session_id)
-        if path.exists():
-            path.unlink()
+        for path in (
+            self._build_session_path(channel, session_id),
+            self._build_legacy_session_path(channel, session_id),
+        ):
+            if path.exists():
+                path.unlink()
 
     def _build_session_path(self, channel: str, session_id: str) -> Path:
         """Build the mode file path for the given session."""
@@ -61,6 +66,13 @@ class ChatModeStore:
         safe_channel = _slugify(channel)
         safe_session = _slugify(session_id)
         return self.settings.chat_modes_dir / f"{safe_channel}_{safe_session}.json"
+
+    def _build_legacy_session_path(self, channel: str, session_id: str) -> Path:
+        """Read modes persisted by releases that used processed/ as runtime storage."""
+
+        safe_channel = _slugify(channel)
+        safe_session = _slugify(session_id)
+        return self.settings.legacy_chat_modes_dir / f"{safe_channel}_{safe_session}.json"
 
     def _default_mode(self) -> AssistantMode:
         """Resolve the configured default mode safely."""

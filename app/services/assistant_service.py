@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from app.channels.schemas import IncomingChatMessage
 from app.config import Settings
 from app.memory.chat_mode_store import ChatModeStore
 from app.memory.conversation_store import ConversationMemoryStore
 from app.models.domain import AssistantMode, QueryIntent
-from app.models.schemas import AnswerPayload, ConversationTurn
+from app.models.schemas import AnswerPayload, ConversationTurn, EvidenceItem
+from app.services.evidence_service import EvidenceService
 from app.services.llm_service import LLMService
 from app.services.query_router import QueryRouter
 from app.tools.document_toolkit import DocumentToolkit
@@ -58,6 +60,9 @@ FOLLOW_UP_MARKERS = (
     "ese",
     "si es",
     "y si",
+    "otra cosa",
+    "otra pregunta",
+    "otra consulta",
 )
 
 
@@ -73,6 +78,7 @@ class AssistantService:
         memory_store: ConversationMemoryStore,
         mode_store: ChatModeStore,
         logger: logging.Logger,
+        evidence_service: EvidenceService | None = None,
     ) -> None:
         self.settings = settings
         self.router = router
@@ -81,60 +87,73 @@ class AssistantService:
         self.memory_store = memory_store
         self.mode_store = mode_store
         self.logger = logger.getChild("assistant_service")
+        self.evidence_service = evidence_service or EvidenceService(settings, logger)
 
     def answer_chat_message(self, message: IncomingChatMessage) -> AnswerPayload:
-        """Resolve a channel-agnostic incoming message into a safe answer."""
+        """Answer naturally, adding municipal evidence only when the topic needs it."""
 
         question = message.text.strip()
         normalized_question = normalize_for_search(question)
-        active_mode = self.get_chat_mode(message.channel, message.session_id)
         history = self.memory_store.get_recent_history(
             message.channel,
             message.session_id,
             limit=self.settings.memory_history_limit,
         )
+        active_mode = self.get_chat_mode(message.channel, message.session_id)
+
+        memory_answer = self._answer_from_memory_if_applicable(normalized_question, history)
+        if memory_answer is not None:
+            self._remember_exchange(message, question, memory_answer)
+            return memory_answer
 
         if self._is_greeting(normalized_question):
-            answer = self._build_mode_welcome(active_mode)
-            return self._remember_social_reply(message, question, answer)
-
-        if self._is_thanks(normalized_question):
-            return self._remember_social_reply(
-                message,
-                question,
-                "Con gusto. Si quieres, seguimos con otra consulta.",
-            )
-
-        if self._is_acknowledgement(normalized_question):
+            return self._remember_social_reply(message, question, self._build_mode_welcome(active_mode))
+        if self._is_thanks(normalized_question) or self._is_acknowledgement(normalized_question):
             return self._remember_social_reply(
                 message,
                 question,
                 self._build_mode_acknowledgement(active_mode),
             )
 
-        memory_payload = self._answer_from_memory_if_applicable(normalized_question, history)
-        if memory_payload is not None:
-            self._remember_exchange(message, question, memory_payload)
-            return memory_payload
+        prepared_question, preparation_notes = self.document_toolkit.prepare_query(question)
+        routed = self.router.route(prepared_question)
+        uses_documents = routed.in_domain or self._is_follow_up_to_in_domain_topic(
+            normalized_question,
+            history,
+        )
 
-        if active_mode == AssistantMode.GENERAL:
-            answer, used_llm = self.llm_service.generate_general_answer(
-                question,
-                history=history,
-            )
+        if not uses_documents:
+            if active_mode == AssistantMode.COMMERCE and not self.settings.allow_general_chat:
+                payload = self._build_payload(
+                    answer=(
+                        "Este chat esta en modo Comercio ambulatorio. "
+                        "Hazme una consulta concreta sobre autorizaciones, requisitos, pagos o zonas."
+                    ),
+                    sources=[],
+                    confidence=0.0,
+                    used_llm=False,
+                    response_origin="system",
+                    in_domain=False,
+                    intent=QueryIntent.OUT_OF_SCOPE,
+                )
+                self._remember_exchange(message, question, payload)
+                return payload
+            # CAMBIO CONVERSACION UNICA 1 - Toda charla no documental pasa al LLM.
+            # Motivo: PachaBot debe conversar naturalmente, incluidos saludos.
+            # Riesgo mitigado: los hechos municipales solo se contestan con RAG abajo.
+            answer, used_llm = self.llm_service.generate_general_answer(question, history=history)
             payload = self._build_payload(
                 answer=answer,
                 sources=[],
-                confidence=0.25 if used_llm else 0.15,
+                confidence=0.25 if used_llm else 0.0,
                 used_llm=used_llm,
+                response_origin="llm_conversation" if used_llm else "fallback",
                 in_domain=False,
-                intent=QueryIntent.OUT_OF_SCOPE,
+                intent=QueryIntent.GENERAL,
             )
             self._remember_exchange(message, question, payload)
             return payload
 
-        prepared_question, preparation_notes = self.document_toolkit.prepare_query(question)
-        routed = self.router.route(prepared_question)
         knowledge = self.document_toolkit.gather_knowledge(
             prepared_question,
             routed,
@@ -142,42 +161,36 @@ class AssistantService:
             original_question=question,
             preparation_notes=preparation_notes,
         )
-
-        in_domain = self._should_treat_as_in_domain(
-            routed,
-            knowledge,
-            normalized_question=normalized_question,
-            history=history,
-        )
-        if not in_domain:
-            payload = self._build_payload(
-                answer=(
-                    "Este chat esta en modo Comercio. "
-                    "Hazme consultas sobre comercio ambulatorio o cambia a modo General "
-                    "si quieres preguntas libres."
-                ),
-                sources=[],
-                confidence=0.0,
-                used_llm=False,
-                in_domain=False,
-                intent=QueryIntent.OUT_OF_SCOPE,
-            )
-            self._remember_exchange(message, question, payload)
-            return payload
-
+        assessment = self.evidence_service.assess(knowledge)
+        answer_chunks = knowledge.chunks if assessment.sufficient else []
         answer, used_llm = self.llm_service.generate_answer(
             knowledge.effective_query,
-            knowledge.chunks,
+            answer_chunks,
             history=history,
+        )
+        response_origin = self.llm_service.classify_response_origin(
+            knowledge.effective_query,
+            answer,
+            answer_chunks,
+            used_llm=used_llm,
         )
         payload = self._build_payload(
             answer=answer,
-            sources=knowledge.sources[: self.settings.assistant_max_sources],
-            confidence=knowledge.confidence,
+            sources=(
+                knowledge.sources[: self.settings.assistant_max_sources]
+                if assessment.sufficient
+                else []
+            ),
+            confidence=knowledge.confidence if assessment.sufficient else 0.0,
             used_llm=used_llm,
-            in_domain=in_domain,
+            response_origin=response_origin,
+            in_domain=True,
             intent=routed.intent if routed.intent != QueryIntent.OUT_OF_SCOPE else QueryIntent.GENERAL,
+            evidence=assessment.items,
+            evidence_warning=assessment.warning,
+            confidence_level=assessment.confidence_level,
         )
+        self.evidence_service.write_trace(message, routed, knowledge, assessment, payload)
         self._remember_exchange(message, question, payload)
         return payload
 
@@ -213,17 +226,13 @@ class AssistantService:
             else self.settings.chat_model
         )
         chunk_count = len(self.document_toolkit.retrieval_service.chunks)
-        mode_line = ""
-        if channel and session_id:
-            active_mode = self.get_chat_mode(channel, session_id)
-            mode_line = f"Modo de este chat: {self.describe_mode(active_mode)}\n"
+        _ = (channel, session_id)
         return (
             f"Canal activo: Telegram\n"
-            f"{mode_line}"
             f"Modo de respuesta: {llm_mode}\n"
             f"Proveedor configurado: {self.settings.llm_provider}\n"
             f"Modelo configurado: {configured_model}\n"
-            f"Selector de modos: habilitado\n"
+            f"Conversacion unica con RAG documental: habilitada\n"
             f"Fragmentos indexados: {chunk_count}\n"
             f"Memoria por sesion: hasta {self.settings.memory_max_turns} turnos"
         )
@@ -255,6 +264,10 @@ class AssistantService:
         used_llm: bool,
         in_domain: bool,
         intent: QueryIntent,
+        response_origin: str | None = None,
+        evidence: list[EvidenceItem] | None = None,
+        evidence_warning: str = "",
+        confidence_level: str = "none",
     ) -> AnswerPayload:
         """Create a normalized answer payload."""
 
@@ -265,6 +278,10 @@ class AssistantService:
             in_domain=in_domain,
             confidence=confidence,
             used_llm=used_llm,
+            response_origin=response_origin or ("llm" if used_llm else "fallback"),
+            evidence=evidence or [],
+            evidence_warning=evidence_warning,
+            confidence_level=confidence_level,
         )
 
     def _remember_social_reply(
@@ -282,6 +299,7 @@ class AssistantService:
             used_llm=False,
             in_domain=True,
             intent=QueryIntent.GENERAL,
+            response_origin="system",
         )
         self._remember_exchange(message, question, payload)
         return payload
@@ -318,6 +336,8 @@ class AssistantService:
                     "sources": payload.sources,
                     "confidence": payload.confidence,
                     "used_llm": payload.used_llm,
+                    "confidence_level": payload.confidence_level,
+                    "evidence_warning": payload.evidence_warning,
                 },
             ),
         )
@@ -325,14 +345,21 @@ class AssistantService:
     def _is_greeting(self, normalized_question: str) -> bool:
         """Detect short greeting-only messages."""
 
-        return any(
-            normalized_question == marker or normalized_question.startswith(f"{marker} ")
-            for marker in GREETING_MARKERS
-        )
+        normalized_question = self._normalize_social_message(normalized_question)
+        remainder = normalized_question
+        recognized_greeting = False
+        for marker in sorted(GREETING_MARKERS, key=len, reverse=True):
+            if remainder == marker:
+                return True
+            if remainder.startswith(f"{marker} "):
+                recognized_greeting = True
+                remainder = remainder[len(marker) :].strip()
+        return recognized_greeting and remainder in GREETING_MARKERS
 
     def _is_thanks(self, normalized_question: str) -> bool:
         """Detect simple acknowledgement messages."""
 
+        normalized_question = self._normalize_social_message(normalized_question)
         return any(
             normalized_question == marker or normalized_question.startswith(f"{marker} ")
             for marker in THANKS_MARKERS
@@ -341,10 +368,20 @@ class AssistantService:
     def _is_acknowledgement(self, normalized_question: str) -> bool:
         """Detect generic confirmations that are not actual document questions."""
 
+        normalized_question = self._normalize_social_message(normalized_question)
         return any(
             normalized_question == marker or normalized_question.startswith(f"{marker} ")
             for marker in ACKNOWLEDGEMENT_MARKERS
         )
+
+    @staticmethod
+    def _normalize_social_message(normalized_question: str) -> str:
+        """Ignore punctuation when routing short conversational messages."""
+
+        # CAMBIO FASE SIMULADOR 3 - Reconocer saludos naturales escritos con signos.
+        # Motivo: "hola, buenas tardes" no debe tratarse como consulta fuera del dominio.
+        # Riesgo mitigado: esta normalizacion solo aplica a respuestas sociales breves.
+        return re.sub(r"\s+", " ", re.sub(r"[,.;:!?¿¡]+", " ", normalized_question)).strip()
 
     def _answer_from_memory_if_applicable(
         self,
@@ -474,13 +511,13 @@ class AssistantService:
 
         if active_mode == AssistantMode.COMMERCE:
             return (
-                "Hola. Soy PachaBot y este chat esta en modo Comercio ambulatorio. "
-                "Puedo ayudarte con ordenanzas, requisitos, autorizaciones, modulos, "
-                "zonas rigidas y pagos SISA."
+                "👋 Hola! Soy PachaBot y este chat está en modo Comercio ambulatorio. "
+                "Puedo ayudarte con ordenanzas, requisitos, autorizaciones, módulos, "
+                "zonas rígidas y pagos SISA."
             )
 
         return (
-            "Hola. Este chat esta en modo General. "
+            "👋 Hola! Este chat está en modo General. "
             "Puedo responder preguntas libres y, si luego quieres, puedes cambiar al modo Comercio."
         )
 
@@ -489,12 +526,12 @@ class AssistantService:
 
         if active_mode == AssistantMode.COMMERCE:
             return (
-                "Claro. Hazme una consulta concreta sobre comercio ambulatorio. "
-                "Por ejemplo: que necesito para vender, que dice el articulo 7 "
-                "o cuanto se paga de SISA."
+                "👍 Claro. Hazme una consulta concreta sobre comercio ambulatorio. "
+                "Por ejemplo: 'Qué necesito para vender?', 'Qué dice el artículo 7' "
+                "o 'Cuánto se paga de SISA?'."
             )
 
         return (
-            "Claro. Hazme cualquier pregunta general. "
+            "👍 Claro. Hazme cualquier pregunta general. "
             "Si luego quieres revisar ordenanzas municipales, cambia al modo Comercio."
         )

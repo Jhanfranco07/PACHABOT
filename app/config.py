@@ -70,12 +70,15 @@ class Settings:
     default_assistant_mode: str = os.getenv("DEFAULT_ASSISTANT_MODE", "general")
     allow_general_chat: bool = _env_as_bool("ALLOW_GENERAL_CHAT", False)
     retrieval_top_k: int = int(os.getenv("RETRIEVAL_TOP_K", "4"))
+    retrieval_min_score: float = float(os.getenv("RETRIEVAL_MIN_SCORE", "0.35"))
+    retrieval_max_results: int = int(os.getenv("RETRIEVAL_MAX_RESULTS", "5"))
     chunk_size: int = int(os.getenv("CHUNK_SIZE", "700"))
     chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
     confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.05"))
     memory_history_limit: int = int(os.getenv("MEMORY_HISTORY_LIMIT", "12"))
     memory_max_turns: int = int(os.getenv("MEMORY_MAX_TURNS", "40"))
     assistant_max_sources: int = int(os.getenv("ASSISTANT_MAX_SOURCES", "3"))
+    rag_debug_trace: bool = _env_as_bool("RAG_DEBUG_TRACE", False)
     raw_data_dir: Path = BASE_DIR / "data" / "raw"
     # CAMBIO FASE 7.1 — Incorporar salidas intermedias del pipeline documental.
     # Motivo: separar texto limpio y norma consolidada de las fuentes originales.
@@ -83,9 +86,15 @@ class Settings:
     cleaned_data_dir: Path = BASE_DIR / "data" / "cleaned"
     consolidated_data_dir: Path = BASE_DIR / "data" / "consolidated"
     processed_data_dir: Path = BASE_DIR / "data" / "processed"
+    tramites_data_dir: Path = BASE_DIR / "data" / "tramites"
+    faq_data_dir: Path = BASE_DIR / "data" / "faq"
     vectorstore_dir: Path = BASE_DIR / "data" / "vectorstore"
-    conversations_dir: Path = BASE_DIR / "data" / "processed" / "conversations"
-    chat_modes_dir: Path = BASE_DIR / "data" / "processed" / "chat_modes"
+    runtime_data_dir: Path = BASE_DIR / "data" / "runtime"
+    runtime_debug_dir: Path = BASE_DIR / "data" / "runtime" / "debug"
+    conversations_dir: Path = BASE_DIR / "data" / "runtime" / "conversations"
+    chat_modes_dir: Path = BASE_DIR / "data" / "runtime" / "chat_modes"
+    legacy_conversations_dir: Path = BASE_DIR / "data" / "processed" / "conversations"
+    legacy_chat_modes_dir: Path = BASE_DIR / "data" / "processed" / "chat_modes"
     processed_chunks_file: Path = BASE_DIR / "data" / "processed" / "chunks.json"
     consolidated_norm_file: Path = BASE_DIR / "data" / "consolidated" / "norma_consolidada.json"
     modification_map_file: Path = BASE_DIR / "data" / "consolidated" / "modification_map.json"

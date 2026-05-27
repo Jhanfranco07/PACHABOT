@@ -9,6 +9,7 @@ from app.utils.text_cleaner import normalize_for_search
 
 DOMAIN_HINTS = (
     "comercio ambulatorio",
+    "ambulatorio",
     "ambulante",
     "vender",
     "venta",
@@ -30,7 +31,17 @@ DOMAIN_HINTS = (
 )
 
 INTENT_HINTS: dict[QueryIntent, tuple[str, ...]] = {
-    QueryIntent.REQUISITOS: ("requisito", "requisitos", "solicitar", "tramite", "documentos", "que necesito"),
+    QueryIntent.REQUISITOS: (
+        "requisito",
+        "requisitos",
+        "solicitar",
+        "tramite",
+        "documentos",
+        "que necesito",
+        "que debo hacer",
+        "como empiezo",
+        "como puedo vender",
+    ),
     QueryIntent.MODULOS: ("modulo", "medida", "dimensiones", "tamano", "puesto"),
     QueryIntent.PAGOS_SISA: ("sisa", "pago", "cuota", "monto", "tasa", "cuanto cuesta"),
     QueryIntent.ZONAS_RIGIDAS: (
@@ -40,10 +51,14 @@ INTENT_HINTS: dict[QueryIntent, tuple[str, ...]] = {
         "restriccion de zona",
         "donde no puedo vender",
         "donde puedo vender",
+        "ubicacion",
+        "miguel grau",
+        "manchay",
     ),
     QueryIntent.AUTORIZACIONES: ("autorizacion", "permiso", "vigencia", "renovacion", "puedo vender"),
     QueryIntent.FERIAS: ("feria", "ferias", "eventual", "temporal"),
     QueryIntent.PROHIBICIONES: ("prohibido", "prohibiciones", "impedido", "restriccion", "sancion"),
+    QueryIntent.NORMATIVA: ("ordenanza", "norma aplicable", "reglamento", "que norma"),
 }
 
 LEGAL_PATTERNS = (
@@ -108,6 +123,11 @@ class QueryRouter:
             if intent_scores[QueryIntent.PAGOS_SISA] > 0:
                 best_intent = QueryIntent.PAGOS_SISA
                 best_score = intent_scores[QueryIntent.PAGOS_SISA]
+        if "sisa" in normalized and any(
+            marker in normalized for marker in ("no pago", "no pagar", "incumpl", "deuda")
+        ):
+            best_intent = QueryIntent.PROHIBICIONES
+            best_score = max(best_score, 2.0)
 
         in_domain = domain_score > 0 or best_score > 0
         if not in_domain:

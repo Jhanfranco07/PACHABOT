@@ -14,6 +14,9 @@ from app.utils.helpers import ensure_directory, write_json
 DOCUMENT_TITLES = {
     "ordenanza_108_2012": "Ordenanza 108-2012-MDP/C",
     "ordenanza_227_2019": "Ordenanza 227-2019-MDP/C",
+    "base_conocimiento_comercio_ambulatorio_pachacamac": (
+        "Base ciudadana de comercio ambulatorio basada en Ordenanzas 108-2012 y 227-2019"
+    ),
 }
 
 

@@ -10,7 +10,7 @@ from app.services.retrieval_service import RetrievalService
 from app.utils.text_cleaner import normalize_for_search
 
 
-ARTICLE_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+[A-Z]?)", re.IGNORECASE)
+ARTICLE_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)", re.IGNORECASE)
 COMMON_TYPO_HINTS = {
     "ke": "que",
     "qe": "que",
@@ -32,6 +32,7 @@ INTENT_EXPANSIONS = {
     QueryIntent.AUTORIZACIONES: "autorizacion permiso vigencia renovacion",
     QueryIntent.FERIAS: "ferias feria temporal autorizacion especial",
     QueryIntent.PROHIBICIONES: "prohibiciones sanciones restricciones",
+    QueryIntent.NORMATIVA: "ordenanza reglamenta comercio ambulatorio modificatoria",
 }
 
 
@@ -81,13 +82,17 @@ class DocumentToolkit:
         for search_query in search_queries:
             results = self.retrieval_service.search(
                 search_query,
-                top_k=max(self.settings.retrieval_top_k + 1, 5),
+                top_k=self.settings.retrieval_max_results,
                 history=history,
             )
             for item in results:
                 previous = merged.get(item.chunk_id)
                 if previous is None or item.score > previous.score:
                     merged[item.chunk_id] = item
+
+        if routed_query.intent == QueryIntent.NORMATIVA:
+            for item in self._normative_identity_evidence():
+                merged[item.chunk_id] = item
 
         final_chunks = self._finalize_chunks(
             question,
@@ -101,6 +106,8 @@ class DocumentToolkit:
         notes = list(preparation_notes)
         if normalize_for_search(effective_query) != normalize_for_search(question):
             notes.append("La consulta se reformulo usando el historial reciente.")
+        if any(chunk.requires_review for chunk in final_chunks):
+            notes.append("La evidencia recuperada contiene informacion pendiente de validacion humana.")
 
         return KnowledgeBundle(
             original_query=original_question,
@@ -168,6 +175,13 @@ class DocumentToolkit:
         }
 
         reranked: list[RetrievedChunk] = []
+        if article_label:
+            chunks = [
+                chunk
+                for chunk in chunks
+                if chunk.article_label.upper() == article_label
+                and not chunk.exclude_from_retrieval
+            ]
         for chunk in chunks:
             bonus = 0.0
             normalized_text = normalize_for_search(chunk.text)
@@ -202,6 +216,11 @@ class DocumentToolkit:
                     vigencia=chunk.vigencia,
                     modificado_por=chunk.modificado_por,
                     prioridad_retrieval=chunk.prioridad_retrieval,
+                    fuente=chunk.fuente,
+                    tramite_relacionado=chunk.tramite_relacionado,
+                    knowledge_layer=chunk.knowledge_layer,
+                    exclude_from_retrieval=chunk.exclude_from_retrieval,
+                    requires_review=chunk.requires_review,
                     metadata=chunk.metadata,
                 )
             )
@@ -229,18 +248,21 @@ class DocumentToolkit:
                     )
                 )
             ]
+            cost_chunks.sort(
+                key=lambda chunk: (chunk.knowledge_layer == "tramites", chunk.score),
+                reverse=True,
+            )
             if "sisa" not in topic_text:
-                subject_markers = [
-                    topic
-                    for topic in ("autoriz", "permiso", "feria", "modulo")
-                    if topic in topic_text
-                ]
                 cost_chunks = [
                     chunk
                     for chunk in cost_chunks
-                    if any(
-                        marker in normalize_for_search(f"{chunk.section_title} {chunk.text}")
-                        for marker in subject_markers
+                    if (
+                        chunk.knowledge_layer == "tramites"
+                        and chunk.tramite_relacionado == "tramite_comercio_ambulatorio"
+                    )
+                    or (
+                        chunk.knowledge_layer == "faq"
+                        and "costo_permiso" in chunk.chunk_id
                     )
                 ]
             return cost_chunks[: self.settings.retrieval_top_k]
@@ -249,15 +271,67 @@ class DocumentToolkit:
             current_authorization_requirements = [
                 chunk
                 for chunk in reranked
-                if chunk.article_label == "30"
-                and chunk.tipo_contenido == "requisito"
-                and chunk.vigencia == "vigente"
+                if chunk.tipo_contenido == "requisito"
+                and chunk.vigencia in {"vigente", "vigente_con_observacion"}
             ]
             if current_authorization_requirements:
                 # CAMBIO FASE OLLAMA 7 — Acotar requisitos a la norma modificatoria recuperada.
                 # Motivo: evitar que el LLM mezcle requisitos con ubicaciones o tramites secundarios.
                 # Riesgo mitigado: solo se activa cuando ya existe el Articulo 30 vigente.
-                return current_authorization_requirements[:1]
+                citizen_guidance = [
+                    chunk
+                    for chunk in current_authorization_requirements
+                    if chunk.knowledge_layer == "tramites"
+                    or (
+                        chunk.knowledge_layer == "faq"
+                        and "requisit" in normalize_for_search(chunk.chunk_id)
+                    )
+                ]
+                if citizen_guidance:
+                    return citizen_guidance[: self.settings.retrieval_top_k]
+                article_30 = [
+                    chunk for chunk in current_authorization_requirements
+                    if chunk.article_label == "30"
+                ]
+                return article_30[:1] or current_authorization_requirements[:1]
+
+        if intent == QueryIntent.ZONAS_RIGIDAS:
+            # CAMBIO FASE 7.2 - Encabezar el contexto con la restriccion vigente explicita.
+            # Motivo: una lista de vias rigidas no basta para responder si se puede vender.
+            # Riesgo mitigado: se mantiene el contexto de zonas como evidencia secundaria.
+            explicit_restrictions = [
+                chunk
+                for chunk in reranked
+                if "no se autoriza" in normalize_for_search(chunk.text)
+                and "zona" in normalize_for_search(chunk.text)
+                and chunk.vigencia in {"vigente", "vigente_con_observacion"}
+            ]
+            if explicit_restrictions:
+                named_location = any(
+                    marker in normalized_effective_query for marker in ("miguel grau", "manchay")
+                )
+                supporting_zones = [
+                    chunk
+                    for chunk in reranked
+                    if chunk.chunk_id != explicit_restrictions[0].chunk_id
+                    and chunk.tipo_contenido in {"zona", "prohibicion"}
+                ]
+                if named_location:
+                    supporting_zones.sort(
+                        key=lambda chunk: (chunk.article_label == "17.4", chunk.score),
+                        reverse=True,
+                    )
+                return [explicit_restrictions[0], *supporting_zones][
+                    : self.settings.retrieval_top_k
+                ]
+
+        if intent == QueryIntent.NORMATIVA:
+            identity_chunks = self._normative_identity_evidence()
+            if identity_chunks:
+                # CAMBIO FASE SIMULADOR 2 - Responder la norma aplicable con evidencia de identidad.
+                # Motivo: articulos tematicos no acreditan cual ordenanza regula o modifica.
+                # Riesgo mitigado: solo se seleccionan encabezados oficiales del corpus cargado.
+                return identity_chunks[: self.settings.retrieval_top_k]
 
         if asks_definition:
             current_definitions = [
@@ -273,9 +347,68 @@ class DocumentToolkit:
 
         return reranked[: self.settings.retrieval_top_k]
 
+    def _normative_identity_evidence(self) -> list[RetrievedChunk]:
+        """Recover document-title evidence needed for questions about the governing norm."""
+
+        specifications = (
+            (
+                "ordenanza_108_2012",
+                "ordenanza que reglamenta el comercio ambulatorio",
+                "disposicion",
+            ),
+            (
+                "ordenanza_227_2019",
+                "ordenanza modificatoria de la ordenanza",
+                "base_legal",
+            ),
+        )
+        evidence: list[RetrievedChunk] = []
+        for document_id, marker, preferred_type in specifications:
+            candidates = [
+                chunk
+                for chunk in self.retrieval_service.chunks
+                if chunk.document_id == document_id
+                and marker in normalize_for_search(chunk.text)
+            ]
+            if not candidates:
+                continue
+            chunk = min(
+                candidates,
+                key=lambda item: (
+                    item.tipo_contenido != preferred_type,
+                    len(item.text),
+                ),
+            )
+            evidence.append(
+                RetrievedChunk(
+                    chunk_id=chunk.chunk_id,
+                    document_id=chunk.document_id,
+                    source_title=chunk.source_title,
+                    text=chunk.text,
+                    score=4.0,
+                    section_title="IDENTIFICACION NORMATIVA",
+                    article_label=chunk.article_label,
+                    normalized_text=chunk.normalized_text,
+                    tipo_contenido=chunk.tipo_contenido,
+                    user_intents=chunk.user_intents,
+                    vigencia=chunk.vigencia,
+                    modificado_por=chunk.modificado_por,
+                    prioridad_retrieval=chunk.prioridad_retrieval,
+                    fuente=chunk.fuente,
+                    tramite_relacionado=chunk.tramite_relacionado,
+                    knowledge_layer=chunk.knowledge_layer,
+                    exclude_from_retrieval=chunk.exclude_from_retrieval,
+                    requires_review=chunk.requires_review,
+                    metadata=chunk.metadata,
+                )
+            )
+        return evidence
+
     def _format_source(self, chunk: RetrievedChunk) -> str:
         """Create a concise source string."""
 
+        if chunk.fuente:
+            return f"{chunk.fuente} | Estado: {chunk.vigencia.upper()}"
         parts = [chunk.source_title]
         if chunk.article_label:
             parts.append(f"Art. {chunk.article_label}")

@@ -28,6 +28,7 @@ def build_telegram_application(
 
     app = (
         Application.builder()
+        .concurrent_updates(False)
         .token(token)
         .connect_timeout(20)
         .read_timeout(30)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 import joblib
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -14,7 +15,7 @@ from app.utils.helpers import ensure_directory, read_json
 from app.utils.text_cleaner import normalize_for_search
 
 
-ARTICLE_QUERY_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+[A-Z]?)", re.IGNORECASE)
+ARTICLE_QUERY_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)", re.IGNORECASE)
 
 FOLLOW_UP_HINTS = (
     "y ",
@@ -26,6 +27,9 @@ FOLLOW_UP_HINTS = (
     "eso",
     "esa",
     "ese",
+    "otra cosa",
+    "otra pregunta",
+    "otra consulta",
 )
 
 TOPIC_HINTS = (
@@ -82,7 +86,7 @@ class RetrievalService:
         self.logger.info("Vectorstore local actualizado en %s", self.settings.vectorstore_dir)
 
     def load_index(self) -> None:
-        """Load persisted chunks and vectors from disk if available."""
+        """Load RAG chunks and citizen-oriented knowledge sources."""
 
         if not self.settings.processed_chunks_file.exists():
             self.logger.warning(
@@ -92,7 +96,8 @@ class RetrievalService:
             return
 
         raw_chunks = read_json(self.settings.processed_chunks_file)
-        self.chunks = [DocumentChunk(**item) for item in raw_chunks]
+        processed_chunks = [DocumentChunk(**item) for item in raw_chunks]
+        self.chunks = self.compose_knowledge_index(processed_chunks)
 
         if self.settings.vectorizer_file.exists() and self.settings.matrix_file.exists():
             vectorizers = joblib.load(self.settings.vectorizer_file)
@@ -157,13 +162,16 @@ class RetrievalService:
         # CAMBIO FASE 7.2 — Excluir ruido documental e historicos de la respuesta ordinaria.
         # Motivo: los considerandos y textos reemplazados no deben orientar al ciudadano.
         # Riesgo mitigado: una consulta explicita sobre version historica aun puede recuperarlos.
+        top_k = min(top_k, self.settings.retrieval_max_results)
         ranked_indices = combined_scores.argsort()[::-1]
         candidates: list[RetrievedChunk] = []
         for index in ranked_indices:
             chunk = self.chunks[index]
-            if chunk.prioridad_retrieval <= 0:
+            if chunk.exclude_from_retrieval or chunk.prioridad_retrieval <= 0:
                 continue
             if not historical_query and chunk.vigencia in {"historico", "modificado", "derogado"}:
+                continue
+            if chunk.vigencia in {"no_verificable", "vigencia_no_verificable"}:
                 continue
             score = float(combined_scores[index]) + self._metadata_bonus(
                 chunk,
@@ -171,7 +179,7 @@ class RetrievalService:
                 article_label=article_label,
                 normalized_query=normalized_query,
             )
-            if score <= 0:
+            if score < self.settings.retrieval_min_score:
                 continue
 
             candidates.append(
@@ -189,6 +197,11 @@ class RetrievalService:
                     vigencia=chunk.vigencia,
                     modificado_por=chunk.modificado_por,
                     prioridad_retrieval=chunk.prioridad_retrieval,
+                    fuente=chunk.fuente,
+                    tramite_relacionado=chunk.tramite_relacionado,
+                    knowledge_layer=chunk.knowledge_layer,
+                    exclude_from_retrieval=chunk.exclude_from_retrieval,
+                    requires_review=chunk.requires_review,
                     metadata=chunk.metadata,
                 )
             )
@@ -222,6 +235,7 @@ class RetrievalService:
             chunk.section_title,
             f"Articulo {chunk.article_label}" if chunk.article_label else "",
             chunk.tipo_contenido,
+            chunk.knowledge_layer,
             " ".join(chunk.user_intents),
             chunk.text,
         ]
@@ -272,15 +286,26 @@ class RetrievalService:
         normalized_section = normalize_for_search(chunk.section_title)
         bonus = 0.0
 
-        if chunk.vigencia == "vigente":
+        if chunk.vigencia in {"vigente", "vigente_con_observacion"}:
             bonus += 0.55
         bonus += max(0, chunk.prioridad_retrieval - 1) * 0.18
+        bonus += {
+            "tramites": 1.20,
+            "faq": 1.00,
+            "norma_consolidada": 0.45,
+            "chunks": 0.0,
+        }.get(chunk.knowledge_layer, 0.0)
 
         if any(term in normalized_query for term in ("documento", "requisit", "que necesito")):
             if chunk.tipo_contenido == "requisito":
                 bonus += 0.85
             if chunk.article_label == "30" and chunk.vigencia == "vigente":
                 bonus += 1.10
+        if any(term in normalized_query for term in ("cuanto cuesta", "costo", "monto", "tasa", "pago")):
+            if chunk.tipo_contenido == "costo":
+                bonus += 2.00
+            if chunk.knowledge_layer == "tramites" and chunk.tipo_contenido == "costo":
+                bonus += 0.75
         if "cuanto dura" in normalized_query or "vigencia" in normalized_query or "renovacion" in normalized_query:
             if "vigencia" in normalized_text or "plazo" in normalized_text:
                 bonus += 0.75
@@ -289,8 +314,25 @@ class RetrievalService:
         if "zona" in normalized_query or ("donde" in normalized_query and "vender" in normalized_query):
             if chunk.tipo_contenido in {"zona", "prohibicion"}:
                 bonus += 0.90
+            if "zona" in normalized_text and "no se autoriza" in normalized_text:
+                # CAMBIO FASE 7.2 - Priorizar prohibiciones directas sobre zonas rigidas.
+                # Motivo: entregar al LLM la evidencia que responde la autorizacion solicitada.
+                # Riesgo mitigado: el bono solo aplica a texto documental explicito.
+                bonus += 2.25
             if chunk.article_label in {"13", "17.4"} and chunk.vigencia == "vigente":
                 bonus += 0.90
+        if "miguel grau" in normalized_query or "manchay" in normalized_query:
+            if "miguel grau" in normalized_text or "manchay" in normalized_text:
+                bonus += 3.00
+            if chunk.article_label == "17.4" and chunk.vigencia == "vigente":
+                bonus += 1.00
+        if "sisa" in normalized_query and any(
+            marker in normalized_query for marker in ("no pago", "no pagar", "incumpl", "deuda")
+        ):
+            if chunk.article_label == "38" and chunk.vigencia == "vigente":
+                bonus += 3.00
+            if chunk.tipo_contenido == "sancion":
+                bonus += 1.00
 
         if article_label and chunk.article_label and chunk.article_label.upper() == article_label:
             bonus += 2.00
@@ -308,6 +350,180 @@ class RetrievalService:
             bonus -= 0.45
 
         return bonus
+
+    def _eligible_index_chunks(self, chunks: list[DocumentChunk]) -> list[DocumentChunk]:
+        """Exclude known unusable records before they can influence any vector score."""
+
+        return [
+            chunk
+            for chunk in chunks
+            if not chunk.exclude_from_retrieval
+            and chunk.vigencia not in {"no_verificable", "vigencia_no_verificable"}
+        ]
+
+    def compose_knowledge_index(self, processed_chunks: list[DocumentChunk]) -> list[DocumentChunk]:
+        """Combine processed RAG chunks with maintained citizen guidance sources."""
+
+        return self._eligible_index_chunks(
+            [*processed_chunks, *self._load_additional_knowledge()]
+        )
+
+    def _load_additional_knowledge(self) -> list[DocumentChunk]:
+        """Load citizen guidance and consolidated law after the processed RAG corpus."""
+
+        chunks: list[DocumentChunk] = []
+        tramite_file = self.settings.tramites_data_dir / "comercio_ambulatorio.json"
+        faq_file = self.settings.faq_data_dir / "comercio_ambulatorio_faq.json"
+        if tramite_file.exists():
+            chunks.extend(self._chunks_from_tramite(read_json(tramite_file)))
+        if faq_file.exists():
+            chunks.extend(self._chunks_from_faq(read_json(faq_file)))
+        if self.settings.consolidated_norm_file.exists():
+            chunks.extend(self._chunks_from_consolidated(read_json(self.settings.consolidated_norm_file)))
+        return chunks
+
+    def _chunks_from_tramite(self, payload: dict[str, Any]) -> list[DocumentChunk]:
+        title = f"Ficha de tramite: {payload.get('nombre_tramite', 'Comercio ambulatorio')}"
+        draft = bool(payload.get("requiere_validacion_humana", True))
+        requirements = payload.get("requisitos", [])
+        requirement_text = "\n".join(
+            f"- {item.get('descripcion', '')} Fuente: {item.get('fuente', '')}"
+            for item in requirements
+        )
+        records = [
+            (
+                "requisitos",
+                "REQUISITOS",
+                f"{payload.get('descripcion', '')}\nRequisitos:\n{requirement_text}",
+                "requisito",
+                "Ordenanza 227-2019-MDP/C, Articulo 30",
+            ),
+            (
+                "costo",
+                "COSTO",
+                str(payload.get("costo", {}).get("nota", "")),
+                "costo",
+                str(payload.get("costo", {}).get("fuente", "")),
+            ),
+            (
+                "vigencia",
+                "VIGENCIA Y RENOVACION",
+                str(payload.get("vigencia", {}).get("descripcion", "")),
+                "procedimiento",
+                str(payload.get("vigencia", {}).get("fuente", "")),
+            ),
+            (
+                "restricciones",
+                "RESTRICCIONES",
+                "\n".join(str(item) for item in payload.get("restricciones", [])),
+                "zona",
+                "Ordenanza 227-2019-MDP/C, Articulos 2 y 17.4",
+            ),
+        ]
+        return [
+            DocumentChunk(
+                chunk_id=f"tramite-{payload.get('id', 'comercio_ambulatorio')}-{key}",
+                document_id=str(payload.get("id", "tramite_comercio_ambulatorio")),
+                source_title=title,
+                text=text,
+                section_title=section,
+                normalized_text=normalize_for_search(text),
+                tipo_contenido=content_type,
+                user_intents=[f"consulta_{key}"],
+                vigencia="vigente_con_observacion" if draft else "vigente",
+                prioridad_retrieval=3,
+                fuente=fuente,
+                tramite_relacionado=str(payload.get("id", "")),
+                knowledge_layer="tramites",
+                requires_review=draft,
+            )
+            for key, section, text, content_type, fuente in records
+            if text.strip()
+        ]
+
+    def _chunks_from_faq(self, payload: list[dict[str, Any]]) -> list[DocumentChunk]:
+        chunks: list[DocumentChunk] = []
+        for item in payload:
+            faq_id = str(item.get("faq_id", "faq"))
+            text = "\n".join(
+                [
+                    str(item.get("pregunta", "")),
+                    *[str(value) for value in item.get("variantes", [])],
+                    str(item.get("respuesta_orientativa", "")),
+                ]
+            )
+            content_type = self._infer_content_type(faq_id, text)
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=faq_id,
+                    document_id="faq_comercio_ambulatorio",
+                    source_title="FAQ orientativa de comercio ambulatorio",
+                    text=text,
+                    section_title=str(item.get("pregunta", "")),
+                    normalized_text=normalize_for_search(text),
+                    tipo_contenido=content_type,
+                    user_intents=[f"consulta_{content_type}"],
+                    vigencia="vigente_con_observacion" if item.get("requiere_actualizacion") else "vigente",
+                    prioridad_retrieval=3,
+                    fuente="; ".join(str(source) for source in item.get("fuentes", [])),
+                    tramite_relacionado=str(item.get("tramite_relacionado", "")),
+                    knowledge_layer="faq",
+                    requires_review=bool(item.get("requiere_actualizacion")),
+                )
+            )
+        return chunks
+
+    def _chunks_from_consolidated(self, payload: dict[str, Any]) -> list[DocumentChunk]:
+        chunks: list[DocumentChunk] = []
+        for article in [*payload.get("articles", []), *payload.get("unverified_articles", [])]:
+            label = str(article.get("article_label", ""))
+            text = str(article.get("text", ""))
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=f"consolidada-{label}",
+                    document_id="norma_consolidada",
+                    source_title=str(article.get("source_title", "Norma consolidada")),
+                    text=text,
+                    section_title=str(article.get("section_title", "")),
+                    article_label=label,
+                    normalized_text=normalize_for_search(text),
+                    tipo_contenido=self._infer_content_type(label, text),
+                    user_intents=["consulta_normativa"],
+                    vigencia=str(article.get("vigencia", "vigente")),
+                    modificado_por=str(article.get("modificado_por", "")),
+                    prioridad_retrieval=3,
+                    fuente="; ".join(str(source) for source in article.get("source_trace", [])),
+                    tramite_relacionado="tramite_comercio_ambulatorio",
+                    knowledge_layer="norma_consolidada",
+                    exclude_from_retrieval=bool(article.get("exclude_from_retrieval", False)),
+                    requires_review=bool(article.get("requires_review", False)),
+                    metadata={"validation_notes": article.get("validation_notes", [])},
+                )
+            )
+        return chunks
+
+    @staticmethod
+    def _infer_content_type(label: str, text: str) -> str:
+        normalized = normalize_for_search(f"{label} {text}")
+        if label == "5":
+            return "procedimiento"
+        if label in {"2", "17", "17.4"}:
+            return "zona"
+        if label == "38":
+            return "sancion"
+        if label == "36":
+            return "costo"
+        if label == "30" or "requisit" in normalized:
+            return "requisito"
+        if "sisa" in normalized and "pago" in normalized:
+            return "costo"
+        if "revoc" in normalized or "sancion" in normalized:
+            return "sancion"
+        if "zona rigida" in normalized:
+            return "zona"
+        if "vigencia" in normalized or "renov" in normalized:
+            return "procedimiento"
+        return "disposicion"
 
     def _extract_query_tokens(self, normalized_query: str) -> set[str]:
         """Extract coarse semantic tokens from the query."""

@@ -29,7 +29,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 2",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Segundo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "3",
@@ -67,7 +69,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 5",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Tercero"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "6",
@@ -81,7 +85,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 6",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Cuarto"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "7",
@@ -95,7 +101,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 7",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Quinto"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "7A",
@@ -109,7 +117,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 7A",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Sexto"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "8",
@@ -135,7 +145,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 8A",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Septimo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "9",
@@ -233,34 +245,40 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 16",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Octavo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "17",
       "source_title": "Ordenanza 108-2012-MDP/C modificada por Ordenanza 227-2019-MDP/C",
       "document_id": "ordenanza_108_2012",
       "section_title": "TITULO IV",
-      "text": "Artículo 17°.- La Municipalidad de Pachacámac, determina la dimensión total del espacio ocupado por cada comerciante en la vía pública; el que deberá adecuarse a las características de la calle, jirón o avenida utilizada. El área máxima que la Municipalidad de Pachacámac, autoriza será la siguiente:\n17.1 MÓDULOS:\nLargo: 1.50 m.\nAncho: 1.20 m.\nAltura máxima de 2.00 m. sobre el nivel de la calzada.\nAltura máxima de mostrador de venta, 1 metro sobre el nivel de la calzada.\n17.2 Deben ubicarse en lugares que no obstruyan el libre tránsito peatonal ni la visibilidad vehicular, de manera que impidan la evacuación y concentración de la persona en caso de emergencia.\n17.3 Deben ubicarse fuera del área de seguridad de los cables e instalaciones eléctricas de alumbrado público. Los puestos no deben hacer uso de cables mellizos, de interruptores tipo cuchilla, cables expuestos, de obtención o corriente eléctrica de manera inapropiada y/o clandestina, entre otros, según el Código Nacional Eléctrico Tomo V.\n17.4 La distancia entre los módulos no deberá ser menor a 25 m. uno del otro.\n17.5 La forma y diseño del módulo de comercio ambulatorio será fijado por la Gerencia de Turismo y Desarrollo Económico, con las características y metraje indicado; luego de aprobada su solicitud.\n17.6 Los módulos serán rodantes obligatoriamente para el ejercicio del comercio ambulatorio a nivel del Distrito de Pachacámac.\n17.7 Los módulos deberán contar con un botiquín de primeros auxilios, y para los giros que impliquen el consumo de alimentos deberá contar con un extinguidor de 2 kg, de polvo químico seco, para incendios A, B y C, vigentes y operativos\n17.8 Por ningún motivo se autorizará el comercio informal en vehículos motorizados.",
+      "text": "Artículo 17°.- La Municipalidad de Pachacámac, determina la dimensión total del espacio ocupado por cada comerciante en la vía pública; el que deberá adecuarse a las características de la calle, jirón o avenida utilizada. El área máxima que la Municipalidad de Pachacámac, autoriza será la siguiente:\n17.1 MÓDULOS:\nLargo: 1.50 m.\nAncho: 1.20 m.\nAltura máxima de 2.00 m. sobre el nivel de la calzada.\nAltura máxima de mostrador de venta, 1 metro sobre el nivel de la calzada.\n17.2 Deben ubicarse en lugares que no obstruyan el libre tránsito peatonal ni la visibilidad vehicular, de manera que impidan la evacuación y concentración de la persona en caso de emergencia.\n17.3 Deben ubicarse fuera del área de seguridad de los cables e instalaciones eléctricas de alumbrado público. Los puestos no deben hacer uso de cables mellizos, de interruptores tipo cuchilla, cables expuestos, de obtención o corriente eléctrica de manera inapropiada y/o clandestina, entre otros, según el Código Nacional Eléctrico Tomo V.\n17.4. En el tramo comprendido en Jr. Miguel Grau entre la Av. Víctor Malasquez y la Av. Manchay, así como también entre la cuadra 7 y 8 de la Av. Manchay (tramo comprendido entre Av. 1ro de mayo y Calle 57) se considerarán como zonas rígidas y/o prohibidas para el uso de comercio ambulatorio, en las demás ubicaciones autorizadas de acuerdo al Plano de Zonas Reguladas emitido por la Gerencia de Desarrollo Urbano y Rural los módulos no deberán ser menor a 20.0 m. uno del otro.\n17.5 La forma y diseño del módulo de comercio ambulatorio será fijado por la Gerencia de Turismo y Desarrollo Económico, con las características y metraje indicado; luego de aprobada su solicitud.\n17.6 Los módulos serán rodantes obligatoriamente para el ejercicio del comercio ambulatorio a nivel del Distrito de Pachacámac.\n17.7 Los módulos deberán contar con un botiquín de primeros auxilios, y para los giros que impliquen el consumo de alimentos deberá contar con un extinguidor de 2 kg, de polvo químico seco, para incendios A, B y C, vigentes y operativos\n17.8 Por ningún motivo se autorizará el comercio informal en vehículos motorizados.",
       "vigencia": "vigente",
       "modificado_por": "Ordenanza 227-2019-MDP/C, Articulo Noveno",
       "source_trace": [
         "Ordenanza 108-2012-MDP/C",
         "Ordenanza 227-2019-MDP/C, Articulo Noveno"
-      ]
+      ],
+      "change_type": "MODIFICADO_PARCIALMENTE",
+      "modifies": "Ordenanza 108-2012-MDP/C, Articulo 17 numeral 17.4"
     },
     {
       "article_label": "17.4",
       "source_title": "Ordenanza 227-2019-MDP/C",
       "document_id": "ordenanza_227_2019",
       "section_title": "TITULO IV | ZONAS RIGIDAS",
-      "text": "artículo 17° de la Ordenanza N° 108-2012-MDP/C, debiendo de quedar redactado de la siguiente forma:\n17.4. En el tramo comprendido en Jr. Miguel Grau entre la Av. Víctor Malasquez y la Av. Manchay, así como también entre la cuadra 7 y 8 de la Av. Manchay (tramo comprendido entre Av. 1ro de mayo y Calle 57) se considerarán como zonas rígidas y/o prohibidas para el uso de comercio ambulatorio, en las demás ubicaciones autorizadas de acuerdo al Plano de Zonas Reguladas emitido por la Gerencia de Desarrollo Urbano y Rural los módulos no deberán ser menor a 20.0 m. uno del otro.",
+      "text": "17.4. En el tramo comprendido en Jr. Miguel Grau entre la Av. Víctor Malasquez y la Av. Manchay, así como también entre la cuadra 7 y 8 de la Av. Manchay (tramo comprendido entre Av. 1ro de mayo y Calle 57) se considerarán como zonas rígidas y/o prohibidas para el uso de comercio ambulatorio, en las demás ubicaciones autorizadas de acuerdo al Plano de Zonas Reguladas emitido por la Gerencia de Desarrollo Urbano y Rural los módulos no deberán ser menor a 20.0 m. uno del otro.",
       "vigencia": "vigente",
       "modificado_por": "",
       "change_type": "REEMPLAZADO",
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 17.4",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Noveno"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "18",
@@ -310,7 +328,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 21",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "22",
@@ -330,12 +350,18 @@
       "document_id": "ordenanza_227_2019",
       "section_title": "TITULO V | ALIMENTOS",
       "text": "Artículo 23° e incorporar el numeral 23.5 a la Ordenanza N° 108-2012-MDP/C, debiendo de quedar redactados de la siguiente forma:\nARTÍCULO 23°. Para la venta del rubro 3 se deberá cumplir con las siguientes disposiciones.\n23.1. Los Alimentos se expenderán en envases descartables.\n23.2. Los recipientes que los portan deberán estar en perfecto estado de higiene o conservación y contar con tapas o cubiertas de protección adecuada.\n23.3. Cada vendedor deberá usar un uniforme consistente en Guardapolvo o mandil blanco, chaqueta, gorro o toca, gorro de color blanco, guante de látex o descartables.\n23.4. Cada vendedor deberá entregar las muestras de sus productos a la autoridad Municipal para la certificación por el laboratorio bromatológico cada vez que lo solicite.",
-      "vigencia": "vigente",
+      "vigencia": "vigente_con_observacion",
       "modificado_por": "",
       "change_type": "REEMPLAZADO",
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 23",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Primero"
+      ],
+      "requires_review": true,
+      "exclude_from_retrieval": false,
+      "validation_notes": [
+        "La fuente indica que se incorpora el numeral 23.5, pero el texto disponible solo contiene 23.1 a 23.4.",
+        "No se debe inventar el contenido del numeral 23.5."
       ]
     },
     {
@@ -422,7 +448,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 30",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Segundo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "31",
@@ -496,7 +524,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 36",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Tercero"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "37",
@@ -522,7 +552,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 38",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Cuarto"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "39",
@@ -530,11 +562,13 @@
       "document_id": "ordenanza_108_2012",
       "section_title": "TITULO VI",
       "text": "Artículo 39°.- Para efectos de la renovación de la Autorización temporal para el ejercicio del comercio ambulatorio en el distrito de Pachacámac, la solicitud deberá ser presentada 15 días antes del vencimiento de la autorización concedida.",
-      "vigencia": "vigente",
+      "vigencia": "vigente_con_observacion",
       "modificado_por": "",
       "source_trace": [
         "Ordenanza 108-2012-MDP/C"
-      ]
+      ],
+      "requires_review": true,
+      "conflict_note": "Para consultas sobre renovacion debe priorizarse el Articulo 5 modificado por la Ordenanza 227-2019-MDP/C, que indica treinta (30) dias."
     },
     {
       "article_label": "40",
@@ -560,7 +594,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 41",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Quinto"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "42",
@@ -574,7 +610,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 42",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Sexto"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "43",
@@ -588,7 +626,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 43",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Septimo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "44",
@@ -699,7 +739,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 52",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Decimo Noveno"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "53",
@@ -725,7 +767,9 @@
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 54",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Vigesimo"
-      ]
+      ],
+      "requires_review": false,
+      "exclude_from_retrieval": false
     },
     {
       "article_label": "55",
@@ -759,12 +803,18 @@
       "document_id": "ordenanza_227_2019",
       "section_title": "TITULO IX | OBLIGACIONES Y PROHIBICIONES",
       "text": "Artículo 57. Obligaciones y Prohibiciones del comerciante ambulante autorizado y feriantes autorizados.\nDesarrollar únicamente el giro autorizado por la autoridad municipal dentro del horario determinado, en el espacio determinado.\nExhibir en un lugar visible la autorización.\nAcatar los parámetros técnicamente aprobados sobre modulación, relativas al diseño, colores, material y medidas establecidas por la autoridad municipal, así como mantener un buen estado de conservación al mobiliario urbano.\nMantener limpio el espacio público autorizado en un ámbito no menor de dos metros a la redonda, debiendo contar con un depósito con tapa tipo vaivén con una bolsa interna, para su fácil recojo, de tamaño regular adherido al módulo para el depósito de desperdicios, haciéndose responsable de la limpieza de los desechos que sus clientes arrojen en los espacios públicos.\nMantener una adecuada higiene personal, vestir mandil o uniforme designado que lo identifique como comerciante autorizado. De la misma manera cuando se trate de expendio de alimentos envasados y/o preparados el uniforme será chaqueta blanca con manga y gorro blanco, conforme las normas sanitarias. En caso de comerciantes de frutos y verduras se usará la chaqueta y gorro color verde de acuerdo a la norma de MINSA.\nGarantizar la adecuada calidad y el buen estado del producto, almacenando los productos en condiciones adecuadas e higiénicas.\nRespetar los compromisos asumidos en la declaración jurada y mantener las condiciones que permiten tener vigente la autorización por ...",
-      "vigencia": "vigencia_no_verificable",
+      "vigencia": "no_verificable",
       "modificado_por": "",
       "change_type": "INCORPORADO",
       "modifies": "Ordenanza 108-2012-MDP/C, Articulo 57",
       "source_trace": [
         "Ordenanza 227-2019-MDP/C, Articulo Vigesimo Primero"
+      ],
+      "requires_review": true,
+      "exclude_from_retrieval": true,
+      "validation_notes": [
+        "La fuente disponible termina truncada durante el Articulo 57.",
+        "No se debe usar este articulo para respuestas firmes hasta contar con el texto completo."
       ]
     }
   ],

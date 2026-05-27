@@ -171,14 +171,28 @@ def article_status_map(document_id: str) -> dict[str, dict[str, Any]]:
         elif document_id == "ordenanza_227_2019":
             map_[label] = {
                 "vigencia": (
-                    "vigencia_no_verificable"
+                    "no_verificable"
                     if rule.verification.startswith("vigencia_no_verificable")
+                    else "vigente_con_observacion"
+                    if label == "23"
                     else "vigente"
                 ),
                 "modificado_por": "",
                 "section_title": SECTION_OVERRIDES.get(label, ""),
                 "change_type": rule.change_type,
+                "exclude_from_retrieval": label == "57",
+                "requires_review": label in {"23", "57"},
             }
+    if document_id == "ordenanza_108_2012":
+        map_["39"] = {
+            "vigencia": "vigente_con_observacion",
+            "section_title": "TITULO VI | RENOVACION",
+            "requires_review": True,
+            "conflict_note": (
+                "Para renovación se prioriza el Articulo 5 modificado por "
+                "la Ordenanza 227-2019-MDP/C (30 dias antes del vencimiento)."
+            ),
+        }
     return map_
 
 
@@ -226,8 +240,10 @@ def _extract_amendment_articles(text: str) -> dict[str, dict[str, Any]]:
         if not payload:
             continue
         vigencia = (
-            "vigencia_no_verificable"
+            "no_verificable"
             if rule.verification.startswith("vigencia_no_verificable")
+            else "vigente_con_observacion"
+            if rule.target_article == "23"
             else "vigente"
         )
         output[rule.target_article] = {
@@ -241,6 +257,8 @@ def _extract_amendment_articles(text: str) -> dict[str, dict[str, Any]]:
             "change_type": rule.change_type,
             "modifies": f"Ordenanza 108-2012-MDP/C, Articulo {rule.target_article}",
             "source_trace": [f"{rule.source_title}, {rule.modifying_provision}"],
+            "requires_review": rule.target_article in {"23", "57"},
+            "exclude_from_retrieval": rule.target_article == "57",
         }
     return output
 
@@ -258,7 +276,11 @@ def _apply_modifications(
         amendment = amendments.get(label)
         if amendment is None:
             continue
-        if amendment["vigencia"] == "vigencia_no_verificable":
+        if amendment["vigencia"] == "no_verificable":
+            amendment["validation_notes"] = [
+                "La fuente disponible termina truncada durante el Articulo 57.",
+                "No se debe usar este articulo para respuestas firmes hasta contar con el texto completo.",
+            ]
             unverified.append(amendment)
             continue
         if label == "17.4":
@@ -268,9 +290,25 @@ def _apply_modifications(
             consolidated[label] = _merge_expanded_article(consolidated.get(label), amendment)
         else:
             consolidated[label] = amendment
+    if "23" in consolidated:
+        consolidated["23"]["validation_notes"] = [
+            "La fuente indica que se incorpora el numeral 23.5, pero el texto disponible solo contiene 23.1 a 23.4.",
+            "No se debe inventar el contenido del numeral 23.5.",
+        ]
+    if "39" in consolidated:
+        consolidated["39"].update(
+            {
+                "vigencia": "vigente_con_observacion",
+                "requires_review": True,
+                "conflict_note": (
+                    "Para consultas sobre renovacion debe priorizarse el Articulo 5 "
+                    "modificado por la Ordenanza 227-2019-MDP/C, que indica treinta (30) dias."
+                ),
+            }
+        )
     verified = [
         item for _, item in sorted(consolidated.items(), key=lambda value: _sort_label(value[0]))
-        if item.get("vigencia") == "vigente"
+        if item.get("vigencia") in {"vigente", "vigente_con_observacion"}
     ]
     return verified, unverified
 
@@ -279,7 +317,7 @@ def _merge_partial_article(base: dict[str, Any] | None, amendment: dict[str, Any
     if base is None:
         return amendment
     text = base["text"]
-    text = re.sub(r"(?ms)^17\.4\..*$", amendment["text"], text).strip()
+    text = re.sub(r"(?ms)^17\.4(?:\.|\s).*?(?=^17\.5\b)", amendment["text"] + "\n", text).strip()
     merged = dict(base)
     merged.update(
         {
@@ -287,6 +325,8 @@ def _merge_partial_article(base: dict[str, Any] | None, amendment: dict[str, Any
             "source_title": "Ordenanza 108-2012-MDP/C modificada por Ordenanza 227-2019-MDP/C",
             "source_trace": base["source_trace"] + amendment["source_trace"],
             "modificado_por": "Ordenanza 227-2019-MDP/C, Articulo Noveno",
+            "change_type": "MODIFICADO_PARCIALMENTE",
+            "modifies": "Ordenanza 108-2012-MDP/C, Articulo 17 numeral 17.4",
         }
     )
     return merged
@@ -310,8 +350,9 @@ def _merge_expanded_article(base: dict[str, Any] | None, amendment: dict[str, An
 def _amendment_payload(block: str, label: str) -> str:
     lines = block.splitlines()
     retained: list[str] = []
+    target_number = label.split(".")[0] if "." in label else label
     target_wrapper = re.compile(
-        rf"^art[ií]culo\s+{re.escape(label)}[°º]?\s+de\s+la\s+Ordenanza",
+        rf"^art[ií]culo\s+{re.escape(target_number)}[°º]?\s+de\s+la\s+Ordenanza",
         re.IGNORECASE,
     )
     for index, line in enumerate(lines):

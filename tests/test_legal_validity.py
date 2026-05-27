@@ -37,7 +37,16 @@ def test_norma_consolidada_no_contiene_articulos_historicos(tmp_path: Path) -> N
     payload = _consolidate_real_sources(tmp_path)
 
     assert payload["articles"]
-    assert all(article["vigencia"] == "vigente" for article in payload["articles"])
+    assert all(
+        article["vigencia"] in {"vigente", "vigente_con_observacion"}
+        for article in payload["articles"]
+    )
+    assert any(
+        article["article_label"] == "23"
+        and article["vigencia"] == "vigente_con_observacion"
+        and article["requires_review"] is True
+        for article in payload["articles"]
+    )
 
 
 def test_no_existen_chunks_con_vigencia_contradictoria(tmp_path: Path) -> None:
@@ -46,4 +55,22 @@ def test_no_existen_chunks_con_vigencia_contradictoria(tmp_path: Path) -> None:
     for article in payload["articles"]:
         status_by_label.setdefault(article["article_label"], set()).add(article["vigencia"])
 
-    assert all(statuses == {"vigente"} for statuses in status_by_label.values())
+    assert all(len(statuses) == 1 for statuses in status_by_label.values())
+    assert status_by_label["23"] == {"vigente_con_observacion"}
+    assert status_by_label["39"] == {"vigente_con_observacion"}
+
+
+def test_articulo_17_consolidado_reemplaza_distancia_antigua(tmp_path: Path) -> None:
+    payload = _consolidate_real_sources(tmp_path)
+    article_17 = next(article for article in payload["articles"] if article["article_label"] == "17")
+
+    assert "20.0 m" in article_17["text"]
+    assert "25 m" not in article_17["text"]
+
+
+def test_articulo_57_esta_excluido_por_truncamiento(tmp_path: Path) -> None:
+    payload = _consolidate_real_sources(tmp_path)
+    article_57 = next(article for article in payload["unverified_articles"] if article["article_label"] == "57")
+
+    assert article_57["exclude_from_retrieval"] is True
+    assert article_57["requires_review"] is True

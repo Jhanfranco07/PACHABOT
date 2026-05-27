@@ -26,8 +26,13 @@ def main() -> None:
         logger.warning("No se generaron chunks. Revisa data/raw/")
         return
 
-    retrieval_service.build_index(chunks)
-    logger.info("Ingesta completada con %s chunks", len(chunks))
+    indexed_chunks = retrieval_service.compose_knowledge_index(chunks)
+    retrieval_service.build_index(indexed_chunks)
+    logger.info(
+        "Ingesta completada con %s chunks procesados y %s evidencias indexadas",
+        len(chunks),
+        len(indexed_chunks),
+    )
 
 
 if __name__ == "__main__":

@@ -24,6 +24,11 @@ class DocumentChunk:
     vigencia: str = "vigente"
     modificado_por: str = ""
     prioridad_retrieval: int = 2
+    fuente: str = ""
+    tramite_relacionado: str = ""
+    knowledge_layer: str = "normativa"
+    exclude_from_retrieval: bool = False
+    requires_review: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -42,6 +47,11 @@ class RetrievedChunk:
     vigencia: str = "vigente"
     modificado_por: str = ""
     prioridad_retrieval: int = 2
+    fuente: str = ""
+    tramite_relacionado: str = ""
+    knowledge_layer: str = "normativa"
+    exclude_from_retrieval: bool = False
+    requires_review: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -62,6 +72,28 @@ class AnswerPayload:
     in_domain: bool
     confidence: float
     used_llm: bool
+    response_origin: str = "fallback"
+    evidence: list["EvidenceItem"] = field(default_factory=list)
+    evidence_warning: str = ""
+    confidence_level: str = "none"
+
+
+@dataclass(slots=True)
+class EvidenceItem:
+    source: str
+    source_type: str
+    score: float
+    excerpt: str
+    article_label: str = ""
+    requires_review: bool = False
+
+
+@dataclass(slots=True)
+class EvidenceAssessment:
+    sufficient: bool
+    confidence_level: str
+    warning: str = ""
+    items: list[EvidenceItem] = field(default_factory=list)
 
 
 @dataclass(slots=True)

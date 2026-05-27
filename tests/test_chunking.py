@@ -96,8 +96,11 @@ def test_articulos_modificados_marcados_correctamente() -> None:
 
 def test_articulos_ordenanza_227_son_vigentes() -> None:
     statuses = article_status_map("ordenanza_227_2019")
-    for label in ("2", "5", "6", "7", "16", "21", "23", "30", "36", "38", "41", "42", "43", "52", "54"):
+    for label in ("2", "5", "6", "7", "16", "21", "30", "36", "38", "41", "42", "43", "52", "54"):
         assert statuses[label]["vigencia"] == "vigente"
+    assert statuses["23"]["vigencia"] == "vigente_con_observacion"
+    assert statuses["23"]["requires_review"] is True
+    assert statuses["57"]["exclude_from_retrieval"] is True
 
 
 def test_article_label_no_es_incorrecto() -> None:

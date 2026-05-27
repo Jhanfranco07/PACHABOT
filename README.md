@@ -1,6 +1,6 @@
 # PACHABOT - Asistente Inteligente para Orientacion Ciudadana
 
-Prototipo local en Python de un asistente conversacional para orientacion ciudadana en tramites municipales, enfocado inicialmente en comercio ambulatorio y la Gerencia de Licencias y Desarrollo Economico (GLDE). Hoy funciona en Telegram, pero la arquitectura ya queda separada por canal para crecer luego a WhatsApp o web.
+Prototipo local en Python de un asistente conversacional para orientacion ciudadana en tramites municipales, enfocado inicialmente en comercio ambulatorio de la Municipalidad Distrital de Pachacamac. La ficha de tramite cargada identifica como area responsable a la Gerencia de Turismo y Desarrollo Economico / subgerencia competente; esta denominacion debe validarse institucionalmente antes de publicacion. Funciona en Telegram, consola y simulador web.
 
 ## Objetivo
 
@@ -27,6 +27,24 @@ El proyecto ya no es solo un bot con busqueda simple. Ahora tiene estas capas:
 - `tools/`: concentra herramientas documentales para reescribir consultas y recuperar evidencia
 - `services/`: contiene el orquestador, el router, la recuperacion y la capa LLM
 - `api/`: expone un endpoint HTTP para probar el asistente fuera de Telegram
+
+## Flujo de consulta
+
+```text
+Mensaje del ciudadano
+  -> normalizacion y deteccion de intencion
+  -> reescritura si es una pregunta de seguimiento
+  -> retrieval local: tramites -> FAQ -> chunks -> norma consolidada
+  -> evaluacion de evidencia y nivel de confianza
+  -> Ollama solo si existe evidencia suficiente
+  -> respuesta ciudadana breve con fuentes
+  -> historial y, opcionalmente, traza de depuracion
+```
+
+`EvidenceService` conserva para cada soporte utilizado el tipo de fuente, score,
+extracto base y advertencias de revision. Si no existe soporte suficiente, el
+LLM no recibe contexto para improvisar: el sistema responde con un fallback
+controlado y deriva al area municipal competente.
 
 ## Decision tecnica del RAG
 
@@ -77,7 +95,9 @@ project_root/
 |   |   |-- __init__.py
 |   |   |-- assistant_service.py
 |   |   |-- document_service.py
+|   |   |-- evidence_service.py
 |   |   |-- llm_service.py
+|   |   |-- query_rewriter.py
 |   |   |-- query_router.py
 |   |   `-- retrieval_service.py
 |   |-- tools/
@@ -93,13 +113,23 @@ project_root/
 |   |-- config.py
 |   `-- main.py
 |-- data/
-|   |-- processed/
-|   |   |-- chunks.json
-|   |   `-- conversations/
 |   |-- raw/
 |   |   |-- ordenanza_108_2012.txt
 |   |   `-- ordenanza_227_2019.txt
-|   `-- vectorstore/
+|   |-- cleaned/
+|   |-- consolidated/
+|   |   `-- norma_consolidada.json
+|   |-- processed/
+|   |   `-- chunks.json
+|   |-- tramites/
+|   |   `-- comercio_ambulatorio.json
+|   |-- faq/
+|   |   `-- comercio_ambulatorio_faq.json
+|   |-- vectorstore/
+|   `-- runtime/
+|       |-- chat_modes/
+|       |-- conversations/
+|       `-- debug/
 |-- scripts/
 |   |-- import_docx_documents.py
 |   |-- ingest_documents.py
@@ -111,6 +141,7 @@ project_root/
 |   `-- test_router.py
 |-- .env.example
 |-- README.md
+|-- run_console.py
 |-- requirements.txt
 `-- run.py
 ```
@@ -218,21 +249,25 @@ CHAT_MODEL=mistralai/mistral-small-3.1-24b-instruct:free
 CHAT_MODEL_FALLBACKS=google/gemma-3-12b-it:free
 MODEL_RETRY_COOLDOWN_SECONDS=180
 LLM_MODE=auto
-DEFAULT_ASSISTANT_MODE=general
-ALLOW_GENERAL_CHAT=false
 RETRIEVAL_TOP_K=4
+RETRIEVAL_MIN_SCORE=0.35
+RETRIEVAL_MAX_RESULTS=5
 CHUNK_SIZE=700
 CHUNK_OVERLAP=120
 CONFIDENCE_THRESHOLD=0.05
 MEMORY_HISTORY_LIMIT=12
 MEMORY_MAX_TURNS=40
 ASSISTANT_MAX_SOURCES=3
+RAG_DEBUG_TRACE=false
 ```
 
 Notas:
 
 - `ollama` usa la API local `POST /api/generate`; no requiere API key y queda encapsulado en `app/services/llm_service.py`.
 - `OLLAMA_THINK=false` evita razonamiento extenso en modelos Qwen para respuestas ciudadanas; si la ejecucion solo usa CPU, aumenta `OLLAMA_TIMEOUT` localmente.
+- `data/processed/` contiene artefactos de RAG; las conversaciones y modos nuevos se guardan en `data/runtime/`.
+- La aplicacion puede leer temporalmente sesiones antiguas en `data/processed/conversations/` y `data/processed/chat_modes/`.
+- `RAG_DEBUG_TRACE=true` escribe trazas JSONL por sesion en `data/runtime/debug/`, con consulta reformulada, confianza y evidencia; dejalo desactivado para uso cotidiano.
 - `openrouter` y `groq` funcionan bien con la arquitectura actual porque exponen APIs compatibles con el cliente de OpenAI.
 - Este proyecto todavia no trae busqueda web automatica. Un proveedor externo mejora mucho la conversacion general, pero no equivale por si solo a navegar internet.
 
@@ -258,8 +293,10 @@ Este proceso:
 
 - limpia texto
 - segmenta por secciones y articulos
+- incorpora metadatos de fuente, articulo, vigencia, tipo de contenido y exclusion de retrieval
+- genera la norma consolidada y sus advertencias de validacion
 - genera `chunks.json`
-- construye el indice local en `data/vectorstore/`
+- construye un indice local conjunto con tramites, FAQ, chunks y norma consolidada en `data/vectorstore/`
 
 Si quieres reiniciar el indice:
 
@@ -268,9 +305,18 @@ python scripts/reset_vectorstore.py
 python scripts/ingest_documents.py
 ```
 
+## Agregar conocimiento municipal
+
+- Ordenanzas fuente: agrega texto extraido y revisado a `data/raw/`; conserva originales fuera del indice si aun requieren OCR o correccion.
+- Tramites: completa `data/tramites/comercio_ambulatorio.json` con datos validados por el area responsable y TUPA vigente.
+- FAQ: edita `data/faq/comercio_ambulatorio_faq.json` manteniendo `fuentes` y marcas de revision.
+- Regeneracion: despues de cambiar ordenanzas, ejecuta `python scripts/ingest_documents.py`.
+
+No cargues un monto, plazo o restriccion como definitivo sin una fuente vigente.
+
 ## Ejecutar el bot de Telegram
 
-Con la aplicacion de Ollama ejecutandose en Windows y `qwen3.5:4b` instalado:
+Con la aplicacion de Ollama ejecutandose en Windows y un modelo instalado:
 
 ```powershell
 python run.py
@@ -282,6 +328,76 @@ Comandos disponibles en Telegram:
 - `/help`
 - `/reset`
 - `/estado`
+
+## Probar en consola de VS Code
+
+Para conversar con el asistente sin abrir Telegram, usa el canal local interactivo.
+Este canal utiliza el mismo RAG, memoria y proveedor Ollama que el bot.
+
+```powershell
+.\.venv\Scripts\python.exe run_console.py
+```
+
+La consola mantiene una sola conversación natural. Cuando preguntas por comercio
+ambulatorio, el asistente recupera automáticamente la documentación municipal.
+Ejemplo:
+
+```text
+Tu: Que requisitos necesito para vender en la via publica?
+PachaBot: ...
+```
+
+Comandos disponibles:
+
+- `/reset` - borrar la memoria de la sesion local.
+- `/estado` - ver proveedor, modelo y cantidad de chunks.
+- `/ayuda` - listar comandos.
+- `/salir` - terminar.
+
+Para ver fuentes, intent y si la respuesta uso Ollama:
+
+```powershell
+.\.venv\Scripts\python.exe run_console.py --debug
+```
+
+Si aparece un error de memoria al cargar `qwen3.5:4b`, instala y selecciona el
+modelo liviano para desarrollo:
+
+```powershell
+ollama pull qwen3.5:0.8b
+```
+
+Luego cambia en `.env`:
+
+```env
+OLLAMA_MODEL=qwen3.5:0.8b
+```
+
+Conserva `qwen3.5:4b` para equipos con mas memoria disponible o pruebas de mayor calidad.
+
+## Simulador web tipo chat
+
+Para probar el bot en una interfaz similar a mensajeria, sin abrir Telegram:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+Abre en el navegador:
+
+```text
+http://127.0.0.1:8000/simulator
+```
+
+Desde la pantalla puedes:
+
+- elegir entre los modelos Ollama instalados, por ejemplo `qwen3.5:0.8b` o `qwen3.5:4b`;
+- usar `Veloz`, que envía `think=false` y es el recomendado para probar el bot;
+- usar `Pensamiento`, que envía `think=true` y puede tardar bastante mas;
+- reiniciar la conversación conservando el mismo servidor local.
+
+La seleccion web es temporal: solo se mantiene mientras la API esta ejecutandose.
+Para Telegram, deja el modelo definitivo configurado en `.env`.
 
 ## Probar por HTTP
 
@@ -295,8 +411,15 @@ Endpoints disponibles:
 
 - `GET /health`
 - `GET /info`
+- `GET /simulator`
+- `GET /ollama/config`
+- `POST /ollama/config`
 - `POST /chat`
 - `POST /chat/reset`
+
+`POST /chat` retorna tambien `evidence`, `evidence_warning` y
+`confidence_level`, utiles para auditoria del prototipo y para una futura
+pantalla administrativa.
 
 Ejemplo de prueba:
 
@@ -326,29 +449,48 @@ POST /chat
 - si la consulta es de seguimiento, intenta aprovechar el contexto del chat
 - si la evidencia es debil, responde con honestidad y evita inventar
 - las respuestas municipales solicitan brevedad y evitan agregar datos no preguntados
-- si no se recuperan chunks, el modo municipal no llama a Ollama y responde sin informacion suficiente
+- si no se recuperan chunks para un dato municipal, Ollama recibe la instruccion de indicar que no existe evidencia suficiente, sin inventar datos
 - si la consulta esta fuera del dominio, limita la conversacion a comercio ambulatorio
 - si el LLM externo falla, el bot sigue respondiendo con un fallback local
 
 ## Pruebas
 
 ```powershell
-pytest tests/test_chunking.py tests/test_retrieval.py tests/test_router.py tests/test_assistant_conversation.py
+pytest
 ```
+
+Las pruebas cubren intencion, reformulacion de seguimientos, retrieval,
+vigencia legal, respuesta sin evidencia, evaluacion/traza de evidencia,
+ingesta documental y simulador web.
+`pytest.ini` limita la recoleccion a `tests/`, de modo que los repositorios
+descargados en `referencias-chatbots/` no se mezclen con las pruebas del sistema.
+
+## Referentes revisados y decisiones
+
+- `RAG-Telegram-Bot-LangChain-OpenAI`: es valiosa su separacion `bot/` y `core/`, junto con pruebas de limpieza, split estructural, reformulacion y versionado. PachaBot mantiene esa separacion mediante `channels/`, `services/`, `documents/` y sus reglas de vigencia.
+- `AI-RAG-Assistant-Chatbot`: aporta historial, fuentes persistidas, degradacion controlada y preparacion MCP. Sus dependencias cloud (Pinecone, Neo4j y servicios de despliegue) no se adoptan porque PachaBot debe seguir local.
+- `pathwaycom/llm-app`: aporta la idea de ingesta observable, entradas consultables y servidor MCP documental. Se toma como direccion futura; la ingesta actual permanece simple con archivos y TF-IDF.
+- `datvodinh/rag-chatbot`: confirma un flujo local con Ollama, PDFs, memoria y combinacion de recuperadores. Chroma/BM25/embeddings quedan como evolucion opcional despues de estabilizar el corpus juridico.
+
+Las mejoras aplicadas conservan la estructura existente: conocimiento
+ciudadano primero, norma vigente como respaldo, evidencia auditable antes de
+generacion y servicios externos solo opcionales.
 
 ## Limitaciones actuales
 
 - la calidad sigue dependiendo de la calidad del texto cargado
-- el RAG es local y sencillo, aunque ya tiene memoria y reescritura conversacional
-- no hay OCR
+- el indice TF-IDF es adecuado para el corpus inicial, pero pierde sinonimos y variaciones semanticas amplias
+- no hay OCR ni extractor PDF general integrado; la ingesta vigente parte de texto o DOCX previamente extraido
 - no hay panel admin
 - WhatsApp aun no esta conectado, aunque la arquitectura ya esta separada por canal
 - si xAI devuelve `403` por falta de creditos, el proyecto trabajara en fallback local
+- los datos de area responsable, TUPA y ubicaciones deben revisarse con la municipalidad antes de publicacion
 
 ## Proximos pasos sugeridos
 
-- agregar parser de PDF con limpieza juridica mas fuerte
-- incorporar herramientas externas o busqueda web controlada
+- agregar parser PDF/OCR con metadatos de pagina y limpieza juridica
+- exponer retrieval documental mediante MCP manteniendo archivos locales
 - sumar un canal WhatsApp reutilizando `channels/`
-- reemplazar TF-IDF por embeddings semanticos cuando crezca la base documental
-- agregar observabilidad por chat y metricas de recuperacion
+- evaluar ChromaDB o FAISS con embeddings locales como indice semantico opcional
+- crear panel administrativo para revisar fuentes, conflictos y trazas
+- ejecutar evaluacion de usabilidad SUS con usuarios y pruebas de exactitud documental

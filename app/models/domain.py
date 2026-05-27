@@ -12,6 +12,7 @@ class QueryIntent(str, Enum):
     AUTORIZACIONES = "autorizaciones"
     FERIAS = "ferias"
     PROHIBICIONES = "prohibiciones"
+    NORMATIVA = "normativa"
     OUT_OF_SCOPE = "out_of_scope"
 
 

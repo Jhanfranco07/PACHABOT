@@ -315,6 +315,12 @@ def _build_chunk(
     )
     vigencia = status.get("vigencia", "vigente")
     priority = _assign_priority(content_type, vigencia)
+    exclude_from_retrieval = bool(status.get("exclude_from_retrieval", False))
+    requires_review = bool(status.get("requires_review", False))
+    if exclude_from_retrieval:
+        priority = 0
+    elif requires_review:
+        priority = min(priority, 2)
     return DocumentChunk(
         chunk_id=f"{document_id}-{chunk_number:03d}",
         document_id=document_id,
@@ -328,11 +334,21 @@ def _build_chunk(
         vigencia=vigencia,
         modificado_por=status.get("modificado_por", ""),
         prioridad_retrieval=priority,
+        fuente=(
+            f"{source_title}, Articulo {article_label}"
+            if article_label
+            else source_title
+        ),
+        tramite_relacionado="tramite_comercio_ambulatorio",
+        knowledge_layer="chunks",
+        exclude_from_retrieval=exclude_from_retrieval,
+        requires_review=requires_review,
         metadata={
             "chunk_number": chunk_number,
             "section_title": resolved_section,
             "article_label": article_label,
             "change_type": status.get("change_type", ""),
+            "conflict_note": status.get("conflict_note", ""),
         },
     )
 
@@ -472,7 +488,7 @@ def _infer_user_intents(content_type: str, normalized_text: str) -> list[str]:
 def _assign_priority(content_type: str, vigencia: str) -> int:
     if content_type in {"considerando", "base_legal"}:
         return 0
-    if vigencia == "vigencia_no_verificable":
+    if vigencia in {"no_verificable", "vigencia_no_verificable"}:
         return 0
     if vigencia in {"modificado", "derogado", "historico"}:
         return 1

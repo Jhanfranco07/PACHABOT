@@ -43,3 +43,10 @@ def test_router_treats_exact_cost_question_as_payment_evidence_query() -> None:
 
     assert routed.in_domain is True
     assert routed.intent == QueryIntent.PAGOS_SISA
+
+
+def test_router_identifies_question_about_governing_ordinance() -> None:
+    routed = QueryRouter().route("Cual es la ordenanza de comercio ambulatorio")
+
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.NORMATIVA

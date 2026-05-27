@@ -26,6 +26,11 @@ def build_context_block(chunks: Iterable[RetrievedChunk]) -> str:
         elif chunk.section_title:
             header += f" - {chunk.section_title}"
         header += f" - Estado: {chunk.vigencia.upper()}"
+        header += f" - Capa: {chunk.knowledge_layer.upper()}"
+        if chunk.fuente:
+            header += f" - Sustento: {chunk.fuente}"
+        if chunk.requires_review:
+            header += " - ADVERTENCIA: PENDIENTE DE VALIDACION HUMANA"
         parts.append(f"[FUENTE: {header}]\n{chunk.text}")
     return "\n\n---\n\n".join(parts)
 
@@ -47,27 +52,32 @@ def build_answer_messages(
 ) -> list[dict[str, str]]:
     """Build messages for municipal answer generation."""
 
-    messages = _history_messages(history)
-
     if not chunks:
-        messages.append(
+        # CAMBIO CONVERSACION UNICA 2 - No contaminar una respuesta sin evidencia con turnos previos.
+        # Motivo: el LLM debe explicar la ausencia de respaldo para la pregunta actual.
+        # Riesgo mitigado: la conversacion general conserva historial en su flujo propio.
+        return [
             {
                 "role": "user",
-                "content": f"Pregunta: {question}\n\n{NO_INFO_PROMPT.format(tema=question)}",
+                "content": (
+                    f"Pregunta actual: {question}\n\n"
+                    f"{NO_INFO_PROMPT.format(tema=question)}\n"
+                    "Responde solamente sobre esta pregunta actual en maximo 60 palabras."
+                ),
             }
-        )
-        return messages
+        ]
 
+    messages = _history_messages(history)
     context_block = build_context_block(chunks[:4])
     messages.append(
         {
             "role": "user",
             "content": (
-                "Informacion de las ordenanzas:\n\n"
+                "CONTEXTO RECUPERADO (fichas, FAQ, chunks o norma consolidada):\n\n"
                 f"{context_block}\n\n"
                 "---\n\n"
                 f"{EVIDENCE_CHECK_PROMPT}\n\n"
-                f"Pregunta: {question}"
+                f"PREGUNTA DEL CIUDADANO: {question}\n\nRESPUESTA:"
             ),
         }
     )

@@ -40,17 +40,16 @@ def build_mode_selected_message(mode: AssistantMode) -> str:
 
     if mode == AssistantMode.COMMERCE:
         return (
-            "PachaBot activado.\n\n"
-            "Ahora estas en modo Comercio ambulatorio. En este modo revisare las ordenanzas, "
+            "🎉 PachaBot activado.\n\n"
+            "Ahora estás en modo Comercio ambulatorio. En este modo revisaré las ordenanzas, "
             "la memoria del chat y el contexto municipal para responderte.\n\n"
-            "Escribe tu consulta con tus propias palabras."
+            "Escribe tu consulta con tus propias palabras (por ejemplo: 'Qué necesito para vender?')."
         )
 
     return (
-        "Chat General activado.\n\n"
-        "Ahora estas en modo General.\n\n"
-        "En este modo puedes hacer preguntas libres. Si luego quieres revisar ordenanzas, "
-        "cambia al modo Comercio."
+        "💬 Chat General activado.\n\n"
+        "Ahora estás en modo General.\n\n"
+        "Pregunta lo que quieras de forma natural. Si luego quieres revisar ordenanzas municipales, cambia al modo Comercio."
     )
 
 
@@ -58,11 +57,11 @@ def build_mode_picker_message() -> str:
     """Return the Telegram intro message for choosing a mode."""
 
     return (
-        "Elige el tipo de asistente que quieres usar en este chat:\n\n"
-        "- Modo General: preguntas libres y conversacion general.\n"
-        "- Modo Comercio: consultas sobre comercio ambulatorio y ordenanzas municipales.\n\n"
+        "👋 Bienvenido! Elige el tipo de asistente que quieres usar en este chat:\n\n"
+        "- 🗨️ Modo General: preguntas libres y conversación general.\n"
+        "- 🧾 Modo Comercio: consultas sobre comercio ambulatorio y ordenanzas municipales.\n\n"
         "No necesitas usar preguntas predefinidas: escribe tu consulta con tus propias palabras.\n\n"
-        "Atajos rapidos:\n"
-        "/chat para modo General\n"
-        "/pachabot para modo Comercio"
+        "Atajos rápidos:\n"
+        "/chat - modo General\n"
+        "/pachabot - modo Comercio"
     )

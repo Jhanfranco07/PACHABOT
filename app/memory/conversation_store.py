@@ -21,6 +21,8 @@ class ConversationMemoryStore:
 
         path = self._build_session_path(channel, session_id)
         if not path.exists():
+            path = self._build_legacy_session_path(channel, session_id)
+        if not path.exists():
             return []
 
         try:
@@ -61,9 +63,12 @@ class ConversationMemoryStore:
     def reset_session(self, channel: str, session_id: str) -> None:
         """Delete a session memory file if it exists."""
 
-        path = self._build_session_path(channel, session_id)
-        if path.exists():
-            path.unlink()
+        for path in (
+            self._build_session_path(channel, session_id),
+            self._build_legacy_session_path(channel, session_id),
+        ):
+            if path.exists():
+                path.unlink()
 
     def _build_session_path(self, channel: str, session_id: str) -> Path:
         """Build the conversation file path for the given session."""
@@ -71,6 +76,13 @@ class ConversationMemoryStore:
         safe_channel = _slugify(channel)
         safe_session = _slugify(session_id)
         return self.settings.conversations_dir / f"{safe_channel}_{safe_session}.json"
+
+    def _build_legacy_session_path(self, channel: str, session_id: str) -> Path:
+        """Read legacy runtime data left under processed/ during migration."""
+
+        safe_channel = _slugify(channel)
+        safe_session = _slugify(session_id)
+        return self.settings.legacy_conversations_dir / f"{safe_channel}_{safe_session}.json"
 
 
 def _slugify(value: str) -> str:

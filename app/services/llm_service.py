@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import socket
 import time
 from urllib import error as urllib_error
@@ -36,7 +37,7 @@ class LLMService:
         self._model_cooldowns: dict[str, float] = {}
         self._inline_system_models: set[str] = set()
 
-        if settings.llm_mode == "mock":
+        if settings.llm_mode == "mock" and self.provider != "ollama":
             return
 
         # CAMBIO FASE OLLAMA 2 — Activar Ollama dentro de la capa LLM existente.
@@ -66,12 +67,12 @@ class LLMService:
         history = history or []
         _ = orchestration_notes or []
 
-        # CAMBIO FASE OLLAMA 3 — No generar respuestas normativas sin evidencia RAG.
-        # Motivo: impedir que cualquier proveedor invente requisitos, costos o normas.
-        # Riesgo mitigado: el fallback ya contiene un mensaje ciudadano controlado.
         if not chunks:
             return self._fallback_answer(question, chunks), False
 
+        # CAMBIO FASE OLLAMA 3 — No generar respuestas normativas sin evidencia RAG.
+        # Motivo: impedir que cualquier proveedor invente requisitos, costos o normas.
+        # Riesgo mitigado: el fallback ya contiene un mensaje ciudadano controlado.
         if self.client is None:
             return self._fallback_answer(question, chunks), False
 
@@ -83,6 +84,7 @@ class LLMService:
                 temperature=0.15,
                 warning_label="respuesta municipal",
             )
+            answer = self._apply_municipal_safety_guards(question, answer, chunks)
             return self._ensure_normative_citation(answer, chunks), True
         except Exception as exc:  # pragma: no cover
             self._log_provider_failure("Fallo el uso del LLM externo", exc)
@@ -230,6 +232,49 @@ class LLMService:
 
         self.logger.info("Modelo Ollama disponible: %s", self.settings.ollama_model)
         return True
+
+    def list_ollama_models(self) -> list[str]:
+        """List locally installed Ollama models for development interfaces."""
+
+        response = self._request_ollama_json("/api/tags")
+        models = {
+            model_name
+            for model in response.get("models", [])
+            if isinstance(model, dict)
+            for model_name in (model.get("name"),)
+            if isinstance(model_name, str) and model_name.strip()
+        }
+        return sorted(models)
+
+    def configure_ollama_runtime(
+        self,
+        *,
+        model: str,
+        think: bool,
+        temperature: float,
+        max_tokens: int,
+    ) -> None:
+        """Apply validated in-memory options for the local web simulator."""
+
+        if self.provider != "ollama":
+            raise RuntimeError("El proveedor activo no es Ollama.")
+        installed_models = self.list_ollama_models()
+        if model not in installed_models:
+            raise ValueError(f"El modelo Ollama no esta instalado: {model}")
+
+        # CAMBIO FASE SIMULADOR 1 - Permitir elegir configuracion Ollama en pruebas web.
+        # Motivo: comparar rapidez y calidad sin modificar .env en cada consulta.
+        # Riesgo mitigado: solo acepta modelos instalados y limites validados por la API.
+        self.settings.ollama_model = model
+        self.settings.ollama_think = think
+        self.settings.ollama_temperature = temperature
+        self.settings.ollama_max_tokens = max_tokens
+        self.logger.info(
+            "Configuracion Ollama temporal actualizada: model=%s think=%s max_tokens=%s",
+            model,
+            think,
+            max_tokens,
+        )
 
     def _call_ollama(
         self,
@@ -391,7 +436,11 @@ class LLMService:
     ) -> str:
         """Return an honest fallback when no municipal LLM is active."""
 
-        _ = question
+        memory_limited_ollama = (
+            reason is not None
+            and self.provider == "ollama"
+            and "requires more system memory" in str(reason).lower()
+        )
         if reason is not None and self._should_try_next_model(reason):
             if chunks:
                 best = chunks[0]
@@ -413,45 +462,136 @@ class LLMService:
             )
 
         if not chunks:
-            return NO_INFO_PROMPT.format(tema=question)
+            normalized_question = question.lower()
+            if any(term in normalized_question for term in ("cuanto cuesta", "costo", "monto", "pago")):
+                return (
+                    "No cuento con el costo exacto actualizado en la base documental. "
+                    "Este dato debe verificarse en el TUPA vigente o con el area responsable "
+                    "antes de realizar el pago."
+                )
+            if any(term in normalized_question for term in ("ubicacion", "zona", "jr.", "jiron", "avenida")):
+                return (
+                    "No cuento con informacion suficiente para confirmar esa ubicacion. "
+                    "Valida el punto exacto con el area municipal competente y el plano vigente "
+                    "de zonas autorizadas o restringidas."
+                )
+            return (
+                "No encontre informacion suficiente con respaldo documental verificado para "
+                "responder con seguridad esa consulta. Te recomiendo verificarlo con la Gerencia de "
+                "Turismo y Desarrollo Economico o el area municipal competente."
+            )
 
+        # Produce una respuesta clara y paraphraseada del fragmento recuperado
         best = chunks[0]
-        source = best.source_title
-        if best.article_label:
-            source += f", Articulo {best.article_label} (Art. {best.article_label})"
-        elif best.section_title:
-            source += f", {best.section_title}"
-        source += f", Estado: {best.vigencia.upper()}"
+        source = best.fuente or best.source_title
+        if best.article_label and not best.fuente:
+            source += f" - Art. {best.article_label}"
+        elif best.section_title and not best.fuente:
+            source += f" - {best.section_title}"
+        source += f" - Estado: {best.vigencia.upper()}"
 
-        text = " ".join(best.text.split()).strip()
-        if len(text) > 400:
-            text = text[:397].rstrip() + "..."
+        # Simple heuristic para resumir: tomar oraciones principales del fragmento
+        raw = " ".join(best.text.split()).strip()
+        safe_raw = re.sub(r"(?<=\d)\.(?=\d)", "__DECIMAL__", raw.replace("S/.", "S/"))
+        sentences = [
+            sentence.strip().replace("__DECIMAL__", ".")
+            for sentence in safe_raw.replace('"', '').split(".")
+            if sentence.strip()
+        ]
+        summary_sentences = sentences[:3] if sentences else [raw]
+        summary = ". ".join(summary_sentences).rstrip()
+        if not summary.endswith('.'):
+            summary += '.'
 
-        return (
-            f"Esto es lo que encontre en las ordenanzas ({source}):\n\n"
-            f"{text}\n\n"
-            f"[Fuente: {source}]\n\n"
-            "Para una explicacion mas detallada, activa el modo LLM externo "
-            "o consulta directamente en la municipalidad."
+        # Construir respuesta en lenguaje claro
+        detail = (
+            "Ollama no pudo cargar el modelo configurado por memoria insuficiente. "
+            "Para desarrollo local usa OLLAMA_MODEL=qwen3.5:0.8b o libera memoria y vuelve a intentar."
+            if memory_limited_ollama
+            else "Si quieres una explicación más detallada y en lenguaje sencillo, activa el modo LLM externo."
         )
+        paraphrased = (
+            f"Esto es lo que encontre en la base documental: {summary}\n\n"
+            f"📌 Fuente: {source}\n\n"
+            f"{detail}"
+        )
+        if best.requires_review:
+            paraphrased += (
+                "\n\nEsta orientacion debe confirmarse con el area municipal competente "
+                "porque la fuente esta pendiente de validacion."
+            )
+        return paraphrased
 
     def _ensure_normative_citation(self, answer: str, chunks: list[RetrievedChunk]) -> str:
         """Append a retrieved legal source if a generated municipal answer omitted citation."""
 
-        if "[fuente:" in answer.lower() or not chunks:
+        if not chunks:
             return answer
 
         # CAMBIO FASE OLLAMA 6 — Garantizar trazabilidad aun si el modelo omite la cita.
         # Motivo: una respuesta normativa debe identificar su evidencia recuperada.
         # Riesgo mitigado: solo se adjunta metadata del primer chunk ya seleccionado por RAG.
         primary = chunks[0]
-        source = primary.source_title
-        if primary.article_label:
+        source = primary.fuente or primary.source_title
+        if primary.article_label and not primary.fuente:
             source += f" - Articulo {primary.article_label}"
-        elif primary.section_title:
+        elif primary.section_title and not primary.fuente:
             source += f" - {primary.section_title}"
         source += f" - Estado: {primary.vigencia.upper()}"
-        return f"{answer.rstrip()}\n\n[Fuente: {source}]"
+        rendered = answer.rstrip()
+        if "fuente:" not in answer.lower():
+            rendered += f"\n\n[Fuente: {source}]"
+        if primary.requires_review and "pendiente de validacion" not in answer.lower():
+            rendered += (
+                "\n\nInformacion orientativa pendiente de validacion; "
+                "confirma el dato con el area municipal competente."
+            )
+        return rendered
+
+    def _apply_municipal_safety_guards(
+        self,
+        question: str,
+        answer: str,
+        chunks: list[RetrievedChunk],
+    ) -> str:
+        """Remove two unsafe overstatements that small local models may introduce."""
+
+        guarded = re.sub(r"\bTUPA\s*\([^)]*\)", "TUPA", answer, flags=re.IGNORECASE)
+        normalized_question = question.lower()
+        supports_miguel_grau_segment = any(
+            chunk.article_label == "17.4"
+            and "miguel grau" in chunk.text.lower()
+            for chunk in chunks
+        )
+        if "miguel grau" in normalized_question and supports_miguel_grau_segment:
+            guarded = re.sub(
+                r"(?i)no,\s*no se puede ejercer el comercio ambulatorio en (?:el\s+)?"
+                r"(?:jiron|jirón|jr\.)\s+miguel grau\.",
+                (
+                    "No se autoriza el comercio ambulatorio en el tramo de Jr. Miguel Grau "
+                    "identificado como zona rigida por la norma."
+                ),
+                guarded,
+                count=1,
+            )
+        return guarded
+
+    def classify_response_origin(
+        self,
+        question: str,
+        answer: str,
+        chunks: list[RetrievedChunk],
+        *,
+        used_llm: bool,
+    ) -> str:
+        """Describe whether an LLM response used recovered document evidence."""
+
+        if not used_llm:
+            return "fallback"
+        _ = (question, answer)
+        if not chunks:
+            return "llm_no_evidence"
+        return "llm"
 
     def _fallback_general_answer(self, question: str, *, reason: Exception | None = None) -> str:
         """Return a simple and honest message for general chat without an active LLM."""

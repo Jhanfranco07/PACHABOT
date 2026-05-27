@@ -10,7 +10,6 @@ class ChatRequest(BaseModel):
     session_id: str = "api-session"
     user_id: str = "api-user"
     text: str = Field(min_length=1)
-    mode: str | None = None
     user_display_name: str = ""
     metadata: dict[str, str] = Field(default_factory=dict)
 
@@ -24,7 +23,11 @@ class ChatResponse(BaseModel):
     in_domain: bool
     confidence: float
     used_llm: bool
-    mode: str
+    response_origin: str
+    model_used: str = ""
+    evidence: list[dict[str, object]] = Field(default_factory=list)
+    evidence_warning: str = ""
+    confidence_level: str = "none"
 
 
 class ConversationResetRequest(BaseModel):
@@ -40,3 +43,25 @@ class ConversationResetResponse(BaseModel):
     status: str
     channel: str
     session_id: str
+
+
+class OllamaRuntimeConfigRequest(BaseModel):
+    """Temporary local-generation options used by the web simulator."""
+
+    model: str = Field(min_length=1, max_length=120)
+    think: bool = False
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=400, ge=32, le=2048)
+
+
+class OllamaRuntimeConfigResponse(BaseModel):
+    """Available Ollama models and active simulator configuration."""
+
+    provider: str
+    available: bool
+    models: list[str]
+    active_model: str
+    think: bool
+    temperature: float
+    max_tokens: int
+    message: str = ""

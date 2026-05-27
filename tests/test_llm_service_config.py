@@ -341,6 +341,201 @@ def test_llm_service_calls_native_ollama_generate_endpoint(monkeypatch) -> None:
     assert "No se autoriza comercio ambulatorio" in captured["payload"]["prompt"]
 
 
+def test_llm_service_does_not_replace_generated_answer_with_hardcoded_text(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return DummyOllamaResponse({"response": "Si, puede vender en una zona rigida."})
+
+    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fake_urlopen)
+    service = LLMService(_ollama_settings(), setup_logging("INFO"))
+
+    answer, used_llm = service.generate_answer(
+        "Puedo vender en una zona rigida?",
+        [
+            RetrievedChunk(
+                chunk_id="current-zone-definition",
+                document_id="ordenanza_227_2019",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text=(
+                    "Zonas rigidas: areas en las que no se autoriza el ejercicio "
+                    "del comercio en la via publica."
+                ),
+                score=1.0,
+                article_label="2",
+                tipo_contenido="definicion",
+                vigencia="vigente",
+            )
+        ],
+    )
+
+    assert used_llm is True
+    assert answer.startswith("Si, puede vender")
+    assert "Ordenanza 227-2019-MDP/C - Articulo 2 - Estado: VIGENTE" in answer
+    assert (
+        service.classify_response_origin(
+            "Puedo vender en una zona rigida?",
+            answer,
+            [
+                RetrievedChunk(
+                    chunk_id="proof",
+                    document_id="ordenanza_227_2019",
+                    source_title="Ordenanza 227-2019-MDP/C",
+                    text="Zonas rigidas: no se autoriza el comercio en la via publica.",
+                    score=1.0,
+                    article_label="2",
+                    vigencia="vigente",
+                )
+            ],
+            used_llm=True,
+        )
+        == "llm"
+    )
+
+
+def test_llm_service_keeps_normative_answer_generated_by_model(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return DummyOllamaResponse({"response": "La ordenanza es la 227."})
+
+    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fake_urlopen)
+    service = LLMService(_ollama_settings(), setup_logging("INFO"))
+    chunks = [
+        RetrievedChunk(
+            chunk_id="base",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="ORDENANZA QUE REGLAMENTA EL COMERCIO AMBULATORIO Y FERIAL.",
+            score=1.0,
+            section_title="IDENTIFICACION NORMATIVA",
+            vigencia="vigente",
+        ),
+        RetrievedChunk(
+            chunk_id="modifier",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="ORDENANZA MODIFICATORIA DE LA ORDENANZA N° 108-2012-MDP/C.",
+            score=1.0,
+            section_title="IDENTIFICACION NORMATIVA",
+            vigencia="vigente",
+        ),
+    ]
+
+    answer, used_llm = service.generate_answer(
+        "Cual es la ordenanza de comercio ambulatorio?",
+        chunks,
+    )
+
+    assert used_llm is True
+    assert answer.startswith("La ordenanza es la 227.")
+    assert (
+        service.classify_response_origin(
+            "Cual es la ordenanza de comercio ambulatorio?",
+            answer,
+            chunks,
+            used_llm=True,
+        )
+        == "llm"
+    )
+
+
+def test_llm_service_removes_unverified_tupa_expansion(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return DummyOllamaResponse({"response": "El monto depende del TUPA (Tasa Inventada) vigente."})
+
+    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fake_urlopen)
+    service = LLMService(_ollama_settings(), setup_logging("INFO"))
+
+    answer, used_llm = service.generate_answer(
+        "Cuanto cuesta el permiso?",
+        [
+            RetrievedChunk(
+                chunk_id="cost",
+                document_id="tramite",
+                source_title="Ficha de tramite",
+                text="El costo debe verificarse en el TUPA vigente.",
+                score=1.0,
+                tipo_contenido="costo",
+                vigencia="vigente_con_observacion",
+            )
+        ],
+    )
+
+    assert used_llm is True
+    assert "Tasa Inventada" not in answer
+    assert "TUPA vigente" in answer
+
+
+def test_llm_service_limits_miguel_grau_answer_to_retrieved_segment(monkeypatch) -> None:
+    def fake_urlopen(request, timeout):
+        return DummyOllamaResponse(
+            {"response": "No, no se puede ejercer el comercio ambulatorio en el Jirón Miguel Grau."}
+        )
+
+    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fake_urlopen)
+    service = LLMService(_ollama_settings(), setup_logging("INFO"))
+
+    answer, used_llm = service.generate_answer(
+        "Puedo vender en Jr. Miguel Grau?",
+        [
+            RetrievedChunk(
+                chunk_id="zone",
+                document_id="norma_consolidada",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text="17.4 En el tramo comprendido en Jr. Miguel Grau se considera zona rigida.",
+                score=1.0,
+                article_label="17.4",
+                tipo_contenido="zona",
+                vigencia="vigente",
+            )
+        ],
+    )
+
+    assert used_llm is True
+    assert "tramo de Jr. Miguel Grau" in answer
+
+
+def test_llm_service_uses_ollama_even_when_llm_mode_is_mock(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return DummyOllamaResponse({"response": "Respuesta basada en evidencia desde Ollama."})
+
+    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fake_urlopen)
+    settings = Settings(
+        llm_provider="ollama",
+        llm_mode="mock",
+        ollama_base_url="http://localhost:11434",
+        ollama_model="qwen3.5:4b",
+        ollama_timeout=120,
+        ollama_think=False,
+        ollama_temperature=0.2,
+        ollama_max_tokens=400,
+        ollama_keep_alive="10m",
+    )
+    service = LLMService(settings, setup_logging("INFO"))
+
+    answer, used_llm = service.generate_answer(
+        "Que requisitos necesito?",
+        [
+            RetrievedChunk(
+                chunk_id="current-requirements",
+                document_id="ordenanza_227_2019",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text="Presentar solicitud para autorizacion.",
+                score=1.0,
+                article_label="30",
+                tipo_contenido="requisito",
+                vigencia="vigente",
+            )
+        ],
+    )
+
+    assert used_llm is True
+    assert "Respuesta basada en evidencia desde Ollama." in answer
+    assert captured["url"] == "http://localhost:11434/api/generate"
+
+
 def test_llm_service_checks_configured_ollama_model(monkeypatch) -> None:
     def fake_urlopen(request, timeout):
         assert request.full_url == "http://localhost:11434/api/tags"
@@ -384,13 +579,14 @@ def test_llm_service_ollama_failure_falls_back_without_crashing(monkeypatch) -> 
 
 
 def test_llm_service_does_not_call_ollama_without_rag_evidence(monkeypatch) -> None:
-    def fail_if_called(request, timeout):
-        raise AssertionError("No debe invocarse Ollama sin chunks recuperados.")
+    def fake_urlopen(request, timeout):
+        return DummyOllamaResponse({"response": "No tengo evidencia documental suficiente para indicar el costo."})
 
-    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fail_if_called)
+    monkeypatch.setattr(llm_module.urllib_request, "urlopen", fake_urlopen)
     service = LLMService(_ollama_settings(), setup_logging("INFO"))
 
     answer, used_llm = service.generate_answer("Cuanto cuesta actualmente?", [])
 
     assert used_llm is False
-    assert "no encontre informacion suficiente" in answer.lower()
+    assert "costo exacto actualizado" in answer.lower()
+    assert "tupa vigente" in answer.lower()

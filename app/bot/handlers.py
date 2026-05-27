@@ -1,18 +1,11 @@
 from __future__ import annotations
 
 from telegram import Update
+from telegram.constants import ChatAction
 from telegram.error import TimedOut
 from telegram.ext import ContextTypes
 
-from app.bot.keyboards import (
-    build_mode_keyboard,
-    build_mode_picker_message,
-    build_mode_selected_message,
-    is_mode_selection_message,
-    resolve_mode_from_label,
-)
 from app.channels.telegram import build_incoming_message
-from app.models.domain import AssistantMode
 
 
 MAX_TELEGRAM_MESSAGE_LEN = 3200
@@ -22,12 +15,10 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if update.message is None or update.effective_chat is None:
         return
-    assistant = context.application.bot_data["assistant_service"]
-    session_id = str(update.effective_chat.id)
-    active_mode = assistant.get_chat_mode("telegram", session_id)
     await update.message.reply_text(
-        build_mode_picker_message() + f"\n\nModo actual: {assistant.describe_mode(active_mode)}.",
-        reply_markup=build_mode_keyboard(active_mode),
+        "Hola, soy PachaBot. Puedes escribirme de forma natural. "
+        "Si preguntas por comercio ambulatorio, usare la base documental municipal "
+        "para orientarte con palabras sencillas."
     )
 
 
@@ -37,17 +28,11 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if update.message is None:
         return
     await update.message.reply_text(
-        "Ahora este bot tiene dos modos:\n"
-        "- Modo General: preguntas libres\n"
-        "- Modo Comercio: consultas sobre ordenanzas de comercio ambulatorio\n\n"
+        "Hola. Conversa conmigo normalmente: puedo saludar y orientar consultas "
+        "sobre comercio ambulatorio usando los documentos municipales cargados.\n\n"
         "Comandos utiles:\n"
-        "/modo para elegir o ver el modo actual\n"
-        "/modo_general para usar el modo General\n"
-        "/modo_comercio para usar el modo Comercio\n"
-        "/chat para cambiar directo al modo General\n"
-        "/pachabot para cambiar directo al modo Comercio\n"
-        "/reset para borrar el contexto de este chat\n"
-        "/estado para ver el modo actual del asistente"
+        " /reset - Borrar el contexto de este chat\n"
+        " /estado - Ver el estado actual del asistente"
     )
 
 
@@ -60,8 +45,8 @@ async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     assistant = context.application.bot_data["assistant_service"]
     assistant.reset_conversation("telegram", str(update.effective_chat.id))
     await update.message.reply_text(
-        "Listo. Borre el contexto conversacional de este chat. "
-        "La siguiente consulta empezara como una conversacion nueva."
+        "✅ Listo. He borrado el contexto de este chat. "
+        "La siguiente consulta empezará como una conversación nueva."
     )
 
 
@@ -82,42 +67,39 @@ async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show the current mode and how to switch it."""
+    """Explain the retired mode selector for users of an older prototype."""
 
-    if update.message is None or update.effective_chat is None:
+    if update.message is None:
         return
 
-    assistant = context.application.bot_data["assistant_service"]
-    active_mode = assistant.get_chat_mode("telegram", str(update.effective_chat.id))
     await update.message.reply_text(
-        build_mode_picker_message()
-        + f"\n\nModo actual: {assistant.describe_mode(active_mode)}.",
-        reply_markup=build_mode_keyboard(active_mode),
+        "Ya no necesitas elegir un modo. Escribe cualquier mensaje con naturalidad; "
+        "cuando consultes un tema municipal usare los documentos disponibles."
     )
 
 
 async def general_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Switch the current chat to general mode."""
+    """Retained command alias after removing chat modes."""
 
-    await _switch_mode(update, context, AssistantMode.GENERAL)
+    await mode_handler(update, context)
 
 
 async def commerce_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Switch the current chat to commerce mode."""
+    """Retained command alias after removing chat modes."""
 
-    await _switch_mode(update, context, AssistantMode.COMMERCE)
+    await mode_handler(update, context)
 
 
 async def chat_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shortcut command for general chat mode."""
 
-    await _switch_mode(update, context, AssistantMode.GENERAL)
+    await mode_handler(update, context)
 
 
 async def pachabot_mode_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Shortcut command for municipal commerce mode."""
 
-    await _switch_mode(update, context, AssistantMode.COMMERCE)
+    await mode_handler(update, context)
 
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -126,23 +108,51 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if update.message is None or update.effective_chat is None:
         return
 
-    if is_mode_selection_message(update.message.text or ""):
-        selected_mode = resolve_mode_from_label(update.message.text or "")
-        await _switch_mode(update, context, selected_mode)
-        return
-
     incoming = build_incoming_message(update)
     if incoming is None:
         return
+    # Evitar procesar nuevas consultas si ya hay una respuesta en curso
+    chat_data = context.chat_data
+    if chat_data.get("busy"):
+        await update.message.reply_text(
+            "⏳ Estoy respondiendo tu pregunta anterior. Por favor espera un momento antes de enviar otra consulta."
+        )
+        return
 
-    assistant = context.application.bot_data["assistant_service"]
-    payload = assistant.answer_chat_message(incoming)
+    chat_data["busy"] = True
+    try:
+        # Indicador visual para el usuario
+        await context.bot.send_chat_action(
+            chat_id=update.effective_chat.id,
+            action=ChatAction.TYPING,
+        )
 
-    response = payload.answer.strip()
-    if payload.sources:
-        response += "\n\nFuente(s): " + "; ".join(payload.sources[:3])
+        assistant = context.application.bot_data["assistant_service"]
+        payload = assistant.answer_chat_message(incoming)
 
-    await _send_text_safely(update, response)
+        # Hacer la respuesta más amigable añadiendo un emoji inicial
+        response = "🙂 " + payload.answer.strip()
+        if payload.sources:
+            response += "\n\nFuente(s): " + "; ".join(payload.sources[:3])
+
+        try:
+            await _send_text_safely(update, response)
+        except Exception as exc:  # pragma: no cover - runtime send error
+            # Log and notify user so the bot does not silently drop the reply
+            try:
+                context.application.logger.warning("Error sending message: %s", exc)
+            except Exception:
+                pass
+            try:
+                await update.message.reply_text(
+                    "Lo siento, tuve un problema enviando la respuesta. Intenta escribir de nuevo."
+                )
+            except Exception:
+                # último recurso: nada podemos hacer si incluso esto falla
+                pass
+    finally:
+        # Asegurar que siempre se limpie la bandera aunque falle la generación
+        chat_data["busy"] = False
 
 
 async def _send_text_safely(update: Update, text: str) -> None:
@@ -156,24 +166,6 @@ async def _send_text_safely(update: Update, text: str) -> None:
             await update.message.reply_text(part)
         except TimedOut:
             await update.message.reply_text(part)
-
-
-async def _switch_mode(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    mode: AssistantMode,
-) -> None:
-    """Persist a new chat mode and confirm it to the user."""
-
-    if update.message is None or update.effective_chat is None:
-        return
-
-    assistant = context.application.bot_data["assistant_service"]
-    assistant.set_chat_mode("telegram", str(update.effective_chat.id), mode)
-    await update.message.reply_text(
-        build_mode_selected_message(mode),
-        reply_markup=build_mode_keyboard(mode),
-    )
 
 
 def _split_message(text: str, limit: int = MAX_TELEGRAM_MESSAGE_LEN) -> list[str]:
