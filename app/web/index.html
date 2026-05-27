@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PachaBot | Simulador local</title>
+  <style>
+    :root {
+      --green: #176b5a;
+      --green-soft: #d7f7d3;
+      --green-bright: #22a176;
+      --cream: #f5f2ec;
+      --paper: #fffdf9;
+      --line: #e4dfd5;
+      --ink: #17231f;
+      --muted: #61736d;
+      --shadow: 0 12px 36px rgba(23, 41, 36, .12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(180deg, var(--green) 0 128px, #ece7df 128px);
+      min-height: 100vh;
+    }
+    .shell {
+      max-width: 1160px;
+      height: min(92vh, 840px);
+      min-height: 650px;
+      margin: 34px auto;
+      display: grid;
+      grid-template-columns: 330px 1fr;
+      background: var(--paper);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    aside { border-right: 1px solid var(--line); background: #faf9f5; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 22px 20px 17px;
+      border-bottom: 1px solid var(--line);
+    }
+    .avatar {
+      width: 46px; height: 46px; border-radius: 50%;
+      display: grid; place-items: center;
+      color: white; font-size: 22px; font-weight: 700;
+      background: linear-gradient(145deg, var(--green-bright), var(--green));
+    }
+    h1 { margin: 0; font-size: 19px; }
+    .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .settings { padding: 18px; }
+    .label {
+      display: block;
+      margin: 14px 0 7px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    select, input[type="number"] {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: white;
+      border-radius: 10px;
+      padding: 11px;
+      font-size: 14px;
+    }
+    .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .preset {
+      border: 1px solid var(--line);
+      padding: 10px 6px;
+      background: white;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .preset.active { border-color: var(--green-bright); background: #e9f8f1; color: var(--green); }
+    .advanced { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .apply, .reset {
+      width: 100%;
+      margin-top: 16px;
+      padding: 11px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .apply { background: var(--green); border: 0; color: white; }
+    .reset { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+    .notice {
+      margin-top: 15px; padding: 11px; border-radius: 10px;
+      font-size: 12px; line-height: 1.45; color: var(--muted);
+      background: #f1efe9;
+    }
+    main { display: flex; flex-direction: column; background: var(--cream); }
+    .topbar {
+      height: 72px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: space-between;
+      background: #fbfaf7; border-bottom: 1px solid var(--line); padding: 0 22px;
+    }
+    .contact { display: flex; align-items: center; gap: 12px; }
+    .online { color: var(--green-bright); font-size: 13px; }
+    .badge {
+      border: 1px solid #bfe1d3; background: #e9f8f1; color: var(--green);
+      border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+    }
+    #messages {
+      flex: 1; overflow-y: auto; padding: 26px 7%;
+      background-color: #eee8dc;
+      background-image: radial-gradient(#dfd8cb 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+    .message { max-width: min(76%, 570px); margin: 0 0 13px; line-height: 1.5; font-size: 14.5px; }
+    .bubble {
+      padding: 11px 14px; border-radius: 12px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+      white-space: pre-wrap;
+    }
+    .bot .bubble { background: white; border-top-left-radius: 3px; }
+    .user { margin-left: auto; }
+    .user .bubble { background: var(--green-soft); border-top-right-radius: 3px; }
+    .meta { color: var(--muted); font-size: 11px; margin: 5px 5px 0; }
+    .user .meta { text-align: right; }
+    .origin {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin: 0 0 8px; padding: 4px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 700;
+    }
+    .origin.system { background: #f1efe9; color: #5b6965; }
+    .origin.llm { background: #e8f7ef; color: #116949; }
+    .origin.guard { background: #fff2d8; color: #8a5611; }
+    .origin.fallback { background: #f8e4df; color: #983b32; }
+    .suggestions { display: flex; gap: 8px; flex-wrap: wrap; padding: 9px 20px; background: #fbfaf7; }
+    .chip {
+      border: 1px solid #cee6da; background: white; color: var(--green);
+      border-radius: 18px; padding: 7px 12px; cursor: pointer; font-size: 12px;
+    }
+    form {
+      padding: 14px 18px 18px;
+      background: #fbfaf7; display: flex; gap: 10px;
+    }
+    textarea {
+      resize: none; flex: 1; max-height: 110px;
+      border: 1px solid var(--line); border-radius: 22px;
+      padding: 12px 17px; font: inherit; outline: none;
+    }
+    textarea:focus { border-color: var(--green-bright); }
+    .send {
+      width: 48px; height: 48px; border: 0; border-radius: 50%;
+      background: var(--green); color: white; cursor: pointer; font-size: 19px;
+    }
+    .send:disabled { opacity: .5; cursor: wait; }
+    @media (max-width: 760px) {
+      body { background: var(--paper); }
+      .shell { height: 100vh; min-height: 0; margin: 0; border-radius: 0; display: flex; flex-direction: column; }
+      aside { border: 0; border-bottom: 1px solid var(--line); }
+      .brand { padding: 12px 16px; }
+      .settings { padding: 8px 14px 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .settings .label, .advanced, .notice, .reset { display: none; }
+      .settings .apply { margin: 0; }
+      main { min-height: 0; flex: 1; }
+      .message { max-width: 88%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <div class="avatar">P</div>
+        <div>
+          <h1>PachaBot</h1>
+          <div class="sub">Simulador de desarrollo local</div>
+        </div>
+      </div>
+      <section class="settings">
+        <label class="label" for="model">Modelo Ollama</label>
+        <select id="model"></select>
+        <label class="label">Respuesta</label>
+        <div class="presets">
+          <button class="preset active" data-think="false" type="button">Veloz</button>
+          <button class="preset" data-think="true" type="button">Pensamiento</button>
+        </div>
+        <label class="label">Ajustes</label>
+        <div class="advanced">
+          <input id="temperature" type="number" min="0" max="2" step="0.1" value="0.2" title="Temperatura">
+          <input id="tokens" type="number" min="32" max="2048" step="10" value="400" title="Tokens máximos">
+        </div>
+        <button id="apply" class="apply" type="button">Aplicar configuración</button>
+        <button id="reset" class="reset" type="button">Nueva conversación</button>
+        <div class="notice" id="config-status">
+          El modo veloz desactiva pensamiento extendido y responde con mayor rapidez.
+        </div>
+        <div class="notice">
+          PachaBot conversa con Ollama. Para consultas municipales recupera
+          documentos y te indica si la respuesta tiene evidencia.
+        </div>
+      </section>
+    </aside>
+    <main>
+      <header class="topbar">
+        <div class="contact">
+          <div class="avatar">P</div>
+          <div>
+            <strong>Asistente municipal</strong>
+            <div class="online" id="runtime">conectando con Ollama...</div>
+          </div>
+        </div>
+        <div class="badge" id="mode-badge">VELOZ</div>
+      </header>
+      <section id="messages">
+        <div class="message bot">
+          <div class="bubble"><span class="origin system">Interfaz</span><br>Escribe un mensaje para comenzar la conversación con PachaBot.</div>
+        </div>
+      </section>
+      <div class="suggestions">
+        <button class="chip" type="button">¿Qué requisitos necesito para vender en la vía pública?</button>
+        <button class="chip" type="button">¿Puedo vender en una zona rígida?</button>
+        <button class="chip" type="button">¿Cuánto cuesta exactamente este trámite actualmente?</button>
+      </div>
+      <form id="chat-form">
+        <textarea id="message-input" rows="1" placeholder="Escribe una consulta ciudadana..." required></textarea>
+        <button class="send" id="send" type="submit" aria-label="Enviar">➤</button>
+      </form>
+    </main>
+  </div>
+  <script>
+    const sessionId = sessionStorage.getItem("pachabot-session") || `web-${crypto.randomUUID()}`;
+    sessionStorage.setItem("pachabot-session", sessionId);
+    const byId = (id) => document.getElementById(id);
+    let think = false;
+
+    function setStatus(text, error = false) {
+      byId("config-status").textContent = text;
+      byId("config-status").style.color = error ? "#a02d22" : "";
+    }
+    function setThink(value) {
+      think = value;
+      document.querySelectorAll(".preset").forEach((button) => {
+        button.classList.toggle("active", button.dataset.think === String(value));
+      });
+      byId("mode-badge").textContent = value ? "PENSAMIENTO" : "VELOZ";
+      if (value) {
+        byId("tokens").value = Math.max(Number(byId("tokens").value), 700);
+      } else {
+        byId("tokens").value = 400;
+      }
+    }
+    function appendMessage(text, owner, metadata = "", origin = null) {
+      const wrapper = document.createElement("div");
+      wrapper.className = `message ${owner}`;
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      if (origin) {
+        const badge = document.createElement("span");
+        badge.className = `origin ${origin.kind}`;
+        badge.textContent = origin.label;
+        bubble.appendChild(badge);
+        bubble.appendChild(document.createElement("br"));
+      }
+      bubble.appendChild(document.createTextNode(text));
+      wrapper.appendChild(bubble);
+      if (metadata) {
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = metadata;
+        wrapper.appendChild(meta);
+      }
+      byId("messages").appendChild(wrapper);
+      byId("messages").scrollTop = byId("messages").scrollHeight;
+      return wrapper;
+    }
+    async function loadConfig() {
+      try {
+        const response = await fetch("/ollama/config");
+        const config = await response.json();
+        const select = byId("model");
+        select.innerHTML = "";
+        for (const model of config.models) {
+          const option = document.createElement("option");
+          option.value = model;
+          option.textContent = model;
+          option.selected = model === config.active_model;
+          select.appendChild(option);
+        }
+        if (!config.models.length) {
+          select.add(new Option(config.active_model || "Sin modelos disponibles", config.active_model || ""));
+        }
+        byId("temperature").value = config.temperature || 0.2;
+        byId("tokens").value = config.max_tokens || 400;
+        setThink(Boolean(config.think));
+        byId("runtime").textContent = config.available ? `${config.active_model} disponible` : "Ollama no disponible";
+        if (config.message) setStatus(config.message, !config.available);
+      } catch (error) {
+        byId("runtime").textContent = "API no disponible";
+        setStatus("No se pudo consultar Ollama. Revisa que el servidor esté iniciado.", true);
+      }
+    }
+    async function applyConfig() {
+      const payload = {
+        model: byId("model").value,
+        think,
+        temperature: Number(byId("temperature").value),
+        max_tokens: Number(byId("tokens").value)
+      };
+      const response = await fetch("/ollama/config", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || "No se pudo configurar Ollama.");
+      byId("runtime").textContent = `${result.active_model} disponible`;
+      setStatus(`Activo: ${result.active_model} | ${result.think ? "pensamiento" : "veloz"} | máximo ${result.max_tokens} tokens.`);
+    }
+    async function sendMessage(text) {
+      appendMessage(text, "user", new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}));
+      byId("send").disabled = true;
+      const waiting = appendMessage("Consultando documentos y generando respuesta...", "bot", "", {kind: "system", label: "Procesando"});
+      try {
+        await applyConfig();
+        const response = await fetch("/chat", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            channel: "web",
+            session_id: sessionId,
+            user_id: "web-user",
+            text
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Error al consultar el asistente.");
+        waiting.remove();
+        let origin;
+        if (data.response_origin === "llm_conversation") {
+          origin = {kind: "llm", label: `Conversación con Ollama (${data.model_used})`};
+        } else if (data.response_origin === "llm") {
+          origin = {kind: "llm", label: `Ollama + documentos (${data.model_used})`};
+        } else if (data.response_origin === "llm_no_evidence") {
+          origin = {kind: "guard", label: `Ollama - no encontró evidencia documental (${data.model_used})`};
+        } else if (data.response_origin === "system") {
+          origin = {kind: "system", label: "Mensaje del sistema - sin LLM"};
+        } else {
+          origin = {kind: "fallback", label: "Fallback seguro - sin LLM"};
+        }
+        let runtime = `Intención: ${data.intent} | Fuentes: ${data.sources.length}`;
+        if (data.response_origin === "fallback") {
+          runtime += " | Ollama no invocado o sin evidencia suficiente";
+        }
+        appendMessage(data.answer, "bot", runtime, origin);
+      } catch (error) {
+        waiting.remove();
+        appendMessage(`No se pudo responder: ${error.message}`, "bot", "", {kind: "fallback", label: "Error de ejecución"});
+      } finally {
+        byId("send").disabled = false;
+        byId("message-input").focus();
+      }
+    }
+    document.querySelectorAll(".preset").forEach((button) => button.addEventListener("click", () => setThink(button.dataset.think === "true")));
+    document.querySelectorAll(".chip").forEach((chip) => chip.addEventListener("click", () => sendMessage(chip.textContent)));
+    byId("apply").addEventListener("click", async () => {
+      try { await applyConfig(); } catch (error) { setStatus(error.message, true); }
+    });
+    byId("reset").addEventListener("click", async () => {
+      await fetch("/chat/reset", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({channel: "web", session_id: sessionId})
+      });
+      byId("messages").innerHTML = "";
+      appendMessage("Nueva conversación iniciada. Escribe un mensaje para conversar con PachaBot.", "bot", "", {kind: "system", label: "Interfaz"});
+    });
+    byId("chat-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const input = byId("message-input");
+      const text = input.value.trim();
+      if (text) { input.value = ""; sendMessage(text); }
+    });
+    byId("message-input").addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        byId("chat-form").requestSubmit();
+      }
+    });
+    loadConfig();
+  </script>
+</body>
+</html>

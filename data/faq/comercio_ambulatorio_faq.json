@@ -1,0 +1,369 @@
+[
+  {
+    "faq_id": "faq_001_requisitos_comercio_ambulatorio",
+    "pregunta": "¿Qué necesito para vender en la vía pública?",
+    "variantes": [
+      "¿Cuáles son los requisitos para comercio ambulatorio?",
+      "¿Qué documentos necesito para vender en la calle?",
+      "¿Qué piden para sacar permiso de ambulante?",
+      "¿Cómo puedo solicitar autorización para comercio ambulatorio?",
+      "¿Qué requisitos debo presentar para vender en la vía pública?"
+    ],
+    "respuesta_orientativa": "Para solicitar la autorización municipal de comercio ambulatorio, primero debes contar con la condición de comerciante regulado. Además, debes presentar una solicitud con carácter de declaración jurada según el formato gratuito de la municipalidad, adjuntar dos fotografías tamaño carné e indicar el número de comprobante de pago por derecho TUPA. El monto exacto del pago debe verificarse en el TUPA vigente.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 30",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "requisitos",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_002_comerciante_regulado",
+    "pregunta": "¿Qué significa ser comerciante regulado?",
+    "variantes": [
+      "¿Qué es comerciante regulado?",
+      "¿Debo estar en un padrón para vender?",
+      "¿Qué es el padrón municipal de comerciantes?",
+      "¿Estar en el padrón ya me autoriza a vender?"
+    ],
+    "respuesta_orientativa": "Ser comerciante regulado significa estar inscrito en el Padrón Municipal de Comerciantes que desarrollan actividades comerciales en la vía pública. Sin embargo, estar en el padrón no autoriza automáticamente a vender; para ejercer la actividad se debe solicitar y obtener la autorización municipal correspondiente.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 2",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "definicion_padron",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_003_vigencia_autorizacion",
+    "pregunta": "¿Cuánto dura la autorización municipal?",
+    "variantes": [
+      "¿Por cuánto tiempo dan el permiso?",
+      "¿La autorización dura un año?",
+      "¿Cuándo vence mi autorización?",
+      "¿Cuál es la vigencia del permiso de comercio ambulatorio?"
+    ],
+    "respuesta_orientativa": "La autorización municipal tiene una vigencia de un año. Vence el mismo día y mes de emisión del año siguiente. La renovación puede solicitarse treinta días antes del vencimiento, previa evaluación técnica-legal.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 5"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "vigencia",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_004_renovacion_autorizacion",
+    "pregunta": "¿Cuándo debo renovar mi autorización?",
+    "variantes": [
+      "¿Cuándo puedo renovar mi permiso?",
+      "¿Puedo renovar después de vencido?",
+      "¿Qué pasa si mi autorización ya venció?",
+      "¿Cuántos días antes debo renovar?"
+    ],
+    "respuesta_orientativa": "La renovación debe solicitarse treinta días antes del vencimiento de la autorización, previa evaluación técnica-legal. Si la solicitud se presenta después del vencimiento, la norma señala que no procede la renovación. En ese caso, corresponde consultar al área competente para conocer el procedimiento aplicable.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 5"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "renovacion",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_005_costo_permiso",
+    "pregunta": "¿Cuánto cuesta el permiso de comercio ambulatorio?",
+    "variantes": [
+      "¿Cuánto pago por el permiso?",
+      "¿Cuál es el costo de la autorización?",
+      "¿Cuánto cuesta vender en la vía pública?",
+      "¿Dónde veo el pago del TUPA?"
+    ],
+    "respuesta_orientativa": "La Ordenanza 227-2019 señala que el solicitante debe indicar el número de comprobante de pago por derecho TUPA. Sin embargo, el monto exacto del trámite debe verificarse en el TUPA vigente de la municipalidad antes de realizar el pago.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 30"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "costo_tupa",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_006_sisa",
+    "pregunta": "¿Qué es la SISA y cuánto se paga?",
+    "variantes": [
+      "¿Cuánto pago de SISA?",
+      "¿La SISA es diaria?",
+      "¿Dónde se paga la SISA?",
+      "¿Qué pasa si no pago SISA?"
+    ],
+    "respuesta_orientativa": "La SISA es un tributo que debe pagar el comerciante informal autorizado. La Ordenanza 227-2019 señala un valor de S/ 1.00 diario, pagado de forma adelantada anual o fraccionada por mes en Tesorería de la Municipalidad. Si no se paga por dos meses consecutivos o no consecutivos injustificados, puede retirarse el módulo hasta cancelar la deuda.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 36",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 38"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "sisa",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_007_incumplimiento_sisa",
+    "pregunta": "¿Qué pasa si no pago la SISA?",
+    "variantes": [
+      "¿Me pueden quitar el módulo si no pago?",
+      "¿Qué sanción hay por no pagar SISA?",
+      "¿Puedo perder mi autorización por deuda de SISA?",
+      "¿Qué pasa si debo dos meses de SISA?"
+    ],
+    "respuesta_orientativa": "Si el comerciante autorizado no paga la SISA por dos meses consecutivos o no consecutivos injustificados, se puede retirar el módulo del lugar autorizado hasta que cancele la deuda. Si esta situación ocurre por tercera vez, corresponde el retiro definitivo del módulo y la revocación de la autorización municipal.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 38"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "incumplimiento_sisa",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_008_zona_rigida",
+    "pregunta": "¿Puedo vender en una zona rígida?",
+    "variantes": [
+      "¿Se puede vender en zona rígida?",
+      "¿Dónde está prohibido vender?",
+      "¿Qué es una zona rígida?",
+      "¿Qué pasa si vendo en zona prohibida?"
+    ],
+    "respuesta_orientativa": "No. En las zonas rígidas o prohibidas no se autoriza el ejercicio del comercio ambulatorio. Estas zonas pueden definirse por razones de ornato, seguridad, ordenamiento urbano, presencia de monumentos históricos o normas complementarias. Para una ubicación específica, debe verificarse el plano o evaluación del área competente.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 2",
+      "Ordenanza N° 108-2012-MDP/C, Artículo 13"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "zona_rigida",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_009_jr_miguel_grau",
+    "pregunta": "¿Puedo vender en Jr. Miguel Grau?",
+    "variantes": [
+      "¿Se puede vender en Miguel Grau?",
+      "¿Jr. Miguel Grau es zona rígida?",
+      "¿Puedo ubicarme entre Víctor Malásquez y Manchay?",
+      "¿Está prohibido vender en la Av. Manchay?"
+    ],
+    "respuesta_orientativa": "La Ordenanza 227-2019 señala como zona rígida y/o prohibida el tramo comprendido en Jr. Miguel Grau entre la Av. Víctor Malásquez y la Av. Manchay. También considera el tramo entre la cuadra 7 y 8 de la Av. Manchay, entre Av. 1° de Mayo y Calle 57. Para otros puntos, debe revisarse el Plano de Zonas Reguladas emitido por el área competente.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 17.4"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "ubicacion_especifica",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_010_rubros_permitidos",
+    "pregunta": "¿Qué productos o servicios puedo vender?",
+    "variantes": [
+      "¿Qué giros están permitidos?",
+      "¿Qué rubros permite la ordenanza?",
+      "¿Puedo vender comida?",
+      "¿Puedo vender productos naturales?",
+      "¿Qué códigos de giro existen?"
+    ],
+    "respuesta_orientativa": "La Ordenanza 227-2019 clasifica los giros permitidos en rubros como productos industriales, productos perecibles, productos preparados al día, objetos de uso duradero y servicios. Entre ellos figuran golosinas envasadas, frutas o verduras, productos naturales con registro sanitario, bebidas saludables, potajes tradicionales, sándwiches, artesanías, duplicado de llaves, lustrado de calzado, entre otros. La autorización debe emitirse para un giro específico.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "rubros_permitidos",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_011_productos_naturales",
+    "pregunta": "¿Qué son productos naturales en comercio ambulatorio?",
+    "variantes": [
+      "¿Productos naturales son extractos?",
+      "¿Qué incluye el rubro de productos naturales?",
+      "¿Puedo vender productos naturales?",
+      "¿Qué código tienen los productos naturales?"
+    ],
+    "respuesta_orientativa": "Dentro de la Ordenanza 227-2019, los productos naturales se encuentran en el Rubro 2, referido a productos perecibles, con código G003. La norma señala que deben contar con registro sanitario. Para definir si un producto específico califica en este giro, debe verificarse con el área competente.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "producto_natural",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_012_alimentos_rubro_3",
+    "pregunta": "¿Qué condiciones debo cumplir si vendo alimentos preparados?",
+    "variantes": [
+      "¿Qué requisitos hay para vender comida?",
+      "¿Qué debo cumplir si vendo potajes?",
+      "¿Qué reglas aplican para vender emoliente?",
+      "¿Qué condiciones sanitarias hay para alimentos?"
+    ],
+    "respuesta_orientativa": "Para la venta del Rubro 3, productos preparados al día, los alimentos deben expenderse en envases descartables; los recipientes deben estar en buen estado de higiene y contar con tapas o cubiertas; el vendedor debe usar uniforme, gorro y guantes; y debe entregar muestras a la autoridad municipal para certificación bromatológica cuando se solicite.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 23"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "alimentos_salubridad",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_013_autorizacion_intransferible",
+    "pregunta": "¿Puedo prestar o transferir mi autorización a otra persona?",
+    "variantes": [
+      "¿Puedo ceder mi permiso?",
+      "¿Mi familiar puede usar mi autorización?",
+      "¿La autorización es transferible?",
+      "¿Puedo alquilar mi puesto?"
+    ],
+    "respuesta_orientativa": "No. La autorización municipal es personal e intransferible. La actividad autorizada debe ser desarrollada de forma personal y exclusiva por el comerciante autorizado, limitada al giro y ubicación aprobados.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 7"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "intransferible",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_014_reemplazo_temporal",
+    "pregunta": "¿Puede otra persona reemplazarme temporalmente?",
+    "variantes": [
+      "¿Puedo pedir reemplazo temporal?",
+      "¿Quién puede atender mi módulo si estoy enfermo?",
+      "¿Puedo tener asistente?",
+      "¿Un familiar puede cubrirme?"
+    ],
+    "respuesta_orientativa": "Excepcionalmente, la municipalidad puede autorizar un reemplazo temporal hasta por 30 días calendario al año, previa solicitud y sustento. También puede autorizarse asistente cuando el conductor autorizado acredite condición de persona con discapacidad o adulta mayor. El reemplazo o asistente no adquiere la condición de comerciante regulado.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 7"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "reemplazo_asistente",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_015_documento_autorizacion",
+    "pregunta": "¿Qué debe contener mi autorización municipal?",
+    "variantes": [
+      "¿Qué datos debe tener la resolución?",
+      "¿Qué información aparece en la autorización?",
+      "¿Cómo sé si mi autorización está completa?",
+      "¿La autorización debe indicar horario y ubicación?"
+    ],
+    "respuesta_orientativa": "La autorización municipal debe emitirse mediante resolución y debe contener, entre otros datos, número y fecha, nombre completo del comerciante, DNI, domicilio, código del padrón, giro autorizado, ubicación, horario, plazo de vigencia, fecha de vencimiento e indicaciones o condiciones de la autorización.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "contenido_autorizacion",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_016_autorizacion_no_propiedad",
+    "pregunta": "¿La autorización me da derecho sobre el espacio público?",
+    "variantes": [
+      "¿El puesto pasa a ser mío?",
+      "¿La autorización me da posesión?",
+      "¿Puedo quedarme permanentemente en el espacio?",
+      "¿Tengo derecho sucesorio sobre el puesto?"
+    ],
+    "respuesta_orientativa": "No. La autorización municipal no otorga derecho de propiedad, posesión ni permanencia sobre el espacio público. Solo permite una ubicación temporal autorizada, sin derechos sucesorios.",
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 8A"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "no_propiedad",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_017_sanciones_revocatoria",
+    "pregunta": "¿Por qué me pueden revocar la autorización?",
+    "variantes": [
+      "¿Cuáles son las causales de revocatoria?",
+      "¿Cuándo pierdo mi permiso?",
+      "¿Me pueden quitar la autorización?",
+      "¿Qué faltas hacen perder el permiso?"
+    ],
+    "respuesta_orientativa": "La autorización puede revocarse por causas como vender en zona rígida, comercializar productos de dudosa procedencia o en mal estado, vender o consumir bebidas alcohólicas, agredir a autoridades, arrojar residuos o aguas servidas en la vía pública, presentar información falsa o incumplir el pago de SISA en los supuestos previstos por la norma.",
+    "fuentes": [
+      "Ordenanza N° 108-2012-MDP/C, Artículo 50",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 38"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "revocatoria",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_018_horario",
+    "pregunta": "¿Cuál es el horario permitido para vender?",
+    "variantes": [
+      "¿Hasta qué hora puedo vender?",
+      "¿Desde qué hora puedo atender?",
+      "¿Mi autorización debe decir el horario?",
+      "¿Puedo vender de noche?"
+    ],
+    "respuesta_orientativa": "La Ordenanza 108-2012 establece un horario general de uso de la vía pública de 06:00 a 23:00 horas, con supuestos especiales para determinados alimentos. Sin embargo, la autorización municipal individual debe indicar el horario específico autorizado según el giro aprobado.",
+    "fuentes": [
+      "Ordenanza N° 108-2012-MDP/C, Artículo 11",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "horario",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_019_modulo_medidas",
+    "pregunta": "¿Qué medidas debe tener el módulo de venta?",
+    "variantes": [
+      "¿Cuánto debe medir el módulo?",
+      "¿Cuál es el tamaño permitido del puesto?",
+      "¿Qué distancia debe haber entre módulos?",
+      "¿Puedo usar vehículo motorizado?"
+    ],
+    "respuesta_orientativa": "La norma base establece medidas referenciales para módulos: 1.50 m de largo, 1.20 m de ancho y hasta 2.00 m de altura. Además, la modificación de la Ordenanza 227-2019 señala que en ubicaciones autorizadas, según el Plano de Zonas Reguladas, los módulos no deben estar a una distancia menor de 20 m entre sí. No se autoriza comercio informal en vehículos motorizados.",
+    "fuentes": [
+      "Ordenanza N° 108-2012-MDP/C, Artículo 17",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 17.4"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "modulo_parametros",
+    "requiere_actualizacion": true,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_020_no_encontrado",
+    "pregunta": "No encontré información suficiente",
+    "variantes": [
+      "fallback",
+      "sin evidencia",
+      "no hay información",
+      "consulta fuera de base documental"
+    ],
+    "respuesta_orientativa": "No cuento con información suficiente en la base documental para responder con seguridad esa consulta. Te recomiendo verificarlo con la Gerencia de Turismo y Desarrollo Económico o con el área municipal competente.",
+    "fuentes": [],
+    "tramite_relacionado": null,
+    "tipo_intencion": "fallback_controlado",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  }
+]

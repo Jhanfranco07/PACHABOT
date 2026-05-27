@@ -1,0 +1,523 @@
+{
+  "id": "tramite_comercio_ambulatorio",
+  "nombre_tramite": "Autorización municipal para comercio ambulatorio",
+  "categoria": "Comercio ambulatorio",
+  "descripcion": "Trámite mediante el cual una persona natural solicita autorización municipal temporal para desarrollar una actividad comercial de bienes o servicios en la vía pública del distrito de Pachacámac, únicamente en zonas autorizadas y bajo evaluación municipal.",
+  "area_responsable": {
+    "nombre": "Gerencia de Turismo y Desarrollo Económico / Subgerencia de Comercialización, Anuncios y Promoción del Empleo",
+    "nota": "El área exacta puede variar según el Reglamento de Organización y Funciones vigente de la municipalidad."
+  },
+  "base_legal": [
+    {
+      "norma": "Ordenanza N° 108-2012-MDP/C",
+      "tipo": "Norma base",
+      "descripcion": "Reglamento del comercio ambulatorio y ferial en el distrito de Pachacámac."
+    },
+    {
+      "norma": "Ordenanza N° 227-2019-MDP/C",
+      "tipo": "Norma modificatoria",
+      "descripcion": "Modifica diversos artículos de la Ordenanza N° 108-2012-MDP/C relacionados con definiciones, autorización municipal, requisitos, rubros permitidos, SISA, fiscalización y ferias."
+    }
+  ],
+  "fuentes_principales": [
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 5",
+      "uso": "Vigencia, renovación y cese de la autorización municipal."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 6",
+      "uso": "Condición de comerciante regulado, ingreso al padrón municipal y evaluación técnica/legal."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 7",
+      "uso": "Carácter personal, exclusivo e intransferible de la autorización."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 7A",
+      "uso": "Contenido obligatorio de la resolución de autorización municipal."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 8A",
+      "uso": "La autorización no es automática, está sujeta a evaluación previa y no otorga propiedad ni posesión sobre el espacio público."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 17.4",
+      "uso": "Zonas rígidas específicas y distancia mínima entre módulos."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 21",
+      "uso": "Rubros y giros permitidos para comercio en la vía pública."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 23",
+      "uso": "Condiciones sanitarias para venta del rubro 3: productos preparados al día."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 30",
+      "uso": "Requisitos para obtener o renovar la autorización municipal."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 36",
+      "uso": "Pago de SISA."
+    },
+    {
+      "fuente": "Ordenanza N° 227-2019-MDP/C",
+      "articulo": "Artículo 38",
+      "uso": "Consecuencias por incumplimiento de pago de SISA."
+    },
+    {
+      "fuente": "Ordenanza N° 108-2012-MDP/C",
+      "articulo": "Artículo 50",
+      "uso": "Causales de revocatoria de la autorización municipal."
+    }
+  ],
+  "publico_objetivo": [
+    "Personas naturales interesadas en desarrollar comercio ambulatorio en el distrito de Pachacámac.",
+    "Comerciantes regulados inscritos en el Padrón Municipal de Comerciantes que desarrollan actividades comerciales en la vía pública.",
+    "Comerciantes que desean renovar su autorización municipal temporal."
+  ],
+  "requisitos": [
+    {
+      "orden": 1,
+      "descripcion": "Ser comerciante regulado.",
+      "detalle": "La persona debe estar inscrita en el Padrón Municipal de Comerciantes que desarrollan Actividades Comerciales en la Vía Pública.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
+      "obligatorio": true
+    },
+    {
+      "orden": 2,
+      "descripcion": "Presentar solicitud con carácter de declaración jurada.",
+      "detalle": "La solicitud debe realizarse de acuerdo con el formato gratuito establecido por la municipalidad para este procedimiento.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
+      "obligatorio": true
+    },
+    {
+      "orden": 3,
+      "descripcion": "Adjuntar dos fotografías tamaño carné.",
+      "detalle": "Las fotografías deben corresponder al solicitante.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
+      "obligatorio": true
+    },
+    {
+      "orden": 4,
+      "descripcion": "Indicar el número de comprobante de pago por derecho TUPA.",
+      "detalle": "El monto exacto debe verificarse en el TUPA vigente de la municipalidad.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
+      "obligatorio": true
+    }
+  ],
+  "requisitos_para_ingresar_al_padron": [
+    {
+      "orden": 1,
+      "descripcion": "Presentar solicitud con carácter de declaración jurada de ingreso al Padrón Municipal.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    },
+    {
+      "orden": 2,
+      "descripcion": "Desarrollar giros permitidos por la norma en el distrito de Pachacámac.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    },
+    {
+      "orden": 3,
+      "descripcion": "Presentar declaración jurada de no haber sido sujeto de queja vecinal sustentada ni de infracciones administrativas por comercio en vía pública sin autorización durante cuatro años.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    },
+    {
+      "orden": 4,
+      "descripcion": "Presentar declaración jurada indicando que no sobrepasa las dos UIT anuales, que carece de vínculo laboral con sus proveedores y que se encuentra en estado de necesidad económica y social.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    }
+  ],
+  "costo": {
+    "monto": null,
+    "moneda": "PEN",
+    "descripcion": "El trámite requiere indicar el número de comprobante de pago por derecho TUPA.",
+    "nota_tupa": true,
+    "nota": "El monto exacto debe verificarse en el TUPA vigente de la Municipalidad Distrital de Pachacámac antes de realizar el pago.",
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30"
+  },
+  "sisa": {
+    "aplica": true,
+    "descripcion": "El comerciante informal autorizado está obligado al pago por concepto de SISA.",
+    "monto_referencial": "S/ 1.00 diario",
+    "forma_pago": "Pago adelantado anual o fraccionado por mes, realizado en Tesorería de la Municipalidad.",
+    "advertencia": "El pago de SISA no reemplaza la autorización municipal ni el derecho TUPA del trámite.",
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 36"
+  },
+  "plazo_evaluacion": {
+    "descripcion": "El procedimiento de ingreso al Padrón Municipal tiene un plazo de evaluación de treinta (30) días hábiles.",
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+  },
+  "vigencia": {
+    "descripcion": "La autorización municipal tiene una vigencia de un (01) año.",
+    "vencimiento": "Vence el mismo día y mes de la emisión del año siguiente.",
+    "renovacion": "Puede renovarse treinta (30) días antes del vencimiento, previa evaluación técnica-legal.",
+    "advertencia": "No procede la renovación si se presenta después del vencimiento de la autorización o de la última renovación.",
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 5"
+  },
+  "tipo_de_procedimiento": {
+    "descripcion": "Procedimiento administrativo de evaluación previa sujeto a silencio administrativo negativo.",
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículos 5 y 8A"
+  },
+  "pasos_orientativos": [
+    {
+      "orden": 1,
+      "descripcion": "Verificar si el giro o actividad que desea realizar está permitido por la norma municipal.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    },
+    {
+      "orden": 2,
+      "descripcion": "Solicitar o confirmar la condición de comerciante regulado mediante inscripción en el Padrón Municipal.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    },
+    {
+      "orden": 3,
+      "descripcion": "Preparar la solicitud con carácter de declaración jurada y los requisitos correspondientes.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30"
+    },
+    {
+      "orden": 4,
+      "descripcion": "Realizar el pago correspondiente por derecho TUPA y conservar el número de comprobante.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30"
+    },
+    {
+      "orden": 5,
+      "descripcion": "Presentar la documentación ante la municipalidad para evaluación.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículos 6 y 30"
+    },
+    {
+      "orden": 6,
+      "descripcion": "Esperar la evaluación técnica, legal y, de corresponder, económico-social.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+    },
+    {
+      "orden": 7,
+      "descripcion": "Recibir la resolución de autorización si el trámite es declarado procedente.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículos 7A y 8A"
+    }
+  ],
+  "contenido_de_la_autorizacion": [
+    {
+      "descripcion": "Número y fecha de la resolución de autorización.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Nombre completo del comerciante, DNI y domicilio real.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Código registrado en el Padrón Municipal de Comerciantes.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Nombre de la organización a la que pertenece, de ser el caso.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Giro autorizado.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Ubicación del espacio público autorizado.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Horario autorizado.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Plazo de vigencia y fecha de vencimiento.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    },
+    {
+      "descripcion": "Indicaciones, disposiciones y condiciones de la autorización.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    }
+  ],
+  "rubros_permitidos": [
+    {
+      "rubro": "Rubro 1",
+      "nombre": "Venta de productos de origen industrial",
+      "giros": [
+        {
+          "codigo": "G001",
+          "descripcion": "Golosinas y afines, debidamente envasados con registro sanitario y fecha de vencimiento vigente."
+        }
+      ],
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    },
+    {
+      "rubro": "Rubro 2",
+      "nombre": "Venta de productos perecibles",
+      "giros": [
+        {
+          "codigo": "G002",
+          "descripcion": "Venta de frutas o verduras."
+        },
+        {
+          "codigo": "G003",
+          "descripcion": "Venta de productos naturales, con registro sanitario."
+        }
+      ],
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    },
+    {
+      "rubro": "Rubro 3",
+      "nombre": "Venta de productos preparados al día",
+      "giros": [
+        {
+          "codigo": "G004",
+          "descripcion": "Bebidas saludables: emoliente, quinua, maca, soya."
+        },
+        {
+          "codigo": "G005",
+          "descripcion": "Potajes tradicionales."
+        },
+        {
+          "codigo": "G006",
+          "descripcion": "Dulces tradicionales."
+        },
+        {
+          "codigo": "G007",
+          "descripcion": "Sándwiches."
+        },
+        {
+          "codigo": "G008",
+          "descripcion": "Jugo de naranja y similares."
+        },
+        {
+          "codigo": "G009",
+          "descripcion": "Canchitas, confitería y similares."
+        }
+      ],
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    },
+    {
+      "rubro": "Rubro 4",
+      "nombre": "Venta de objetos de uso duradero",
+      "giros": [
+        {
+          "codigo": "G010",
+          "descripcion": "Mercerías, artículos de bazar y útiles de escritorio."
+        },
+        {
+          "codigo": "G011",
+          "descripcion": "Diarios y revistas, libros y loterías."
+        },
+        {
+          "codigo": "G012",
+          "descripcion": "Monedas y estampillas."
+        },
+        {
+          "codigo": "G013",
+          "descripcion": "Artesanías."
+        },
+        {
+          "codigo": "G014",
+          "descripcion": "Artículos religiosos."
+        },
+        {
+          "codigo": "G015",
+          "descripcion": "Artículos de limpieza."
+        },
+        {
+          "codigo": "G016",
+          "descripcion": "Pilas y relojes."
+        }
+      ],
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    },
+    {
+      "rubro": "Rubro 5",
+      "nombre": "Servicios",
+      "giros": [
+        {
+          "codigo": "G017",
+          "descripcion": "Duplicado de llaves / cerrajería."
+        },
+        {
+          "codigo": "G018",
+          "descripcion": "Lustradores de calzado."
+        },
+        {
+          "codigo": "G019",
+          "descripcion": "Artistas plásticos y retratistas."
+        },
+        {
+          "codigo": "G020",
+          "descripcion": "Fotografías."
+        }
+      ],
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 21"
+    }
+  ],
+  "condiciones_para_venta_de_alimentos_rubro_3": [
+    {
+      "descripcion": "Los alimentos deben expenderse en envases descartables.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 23"
+    },
+    {
+      "descripcion": "Los recipientes deben estar en perfecto estado de higiene o conservación y contar con tapas o cubiertas de protección adecuada.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 23"
+    },
+    {
+      "descripcion": "El vendedor debe usar uniforme consistente en guardapolvo o mandil blanco, chaqueta, gorro o toca, gorro blanco y guantes de látex o descartables.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 23"
+    },
+    {
+      "descripcion": "El vendedor debe entregar muestras de sus productos a la autoridad municipal para certificación por laboratorio bromatológico cuando se solicite.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 23"
+    }
+  ],
+  "zonas_restringidas": {
+    "descripcion_general": "No se autoriza el comercio ambulatorio en zonas rígidas o prohibidas.",
+    "zonas_rigidas_generales": [
+      "Áreas de la vía pública del distrito donde, por razones de ornato, seguridad u ordenamiento urbano, no se autoriza el comercio en la vía pública.",
+      "Áreas del espacio público donde se ubique un monumento histórico o donde una norma complementaria prohíba el comercio ambulatorio."
+    ],
+    "zonas_rigidas_especificas": [
+      "Tramo comprendido en Jr. Miguel Grau entre la Av. Víctor Malásquez y la Av. Manchay.",
+      "Cuadra 7 y 8 de la Av. Manchay, tramo comprendido entre Av. 1° de Mayo y Calle 57."
+    ],
+    "fuentes": [
+      "Ordenanza N° 227-2019-MDP/C, Artículo 2",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 17.4",
+      "Ordenanza N° 108-2012-MDP/C, Artículo 13"
+    ],
+    "advertencia": "Para determinar si una ubicación específica está permitida, debe verificarse el Plano de Zonas Reguladas emitido por la Gerencia de Desarrollo Urbano y Rural."
+  },
+  "parametros_de_modulo": {
+    "descripcion": "Los módulos deben adecuarse a las características de la vía y a las disposiciones técnicas municipales.",
+    "medidas_referenciales": {
+      "largo": "1.50 m",
+      "ancho": "1.20 m",
+      "altura_maxima": "2.00 m sobre el nivel de la calzada",
+      "altura_maxima_mostrador": "1.00 m sobre el nivel de la calzada"
+    },
+    "distancia": "En ubicaciones autorizadas, de acuerdo al Plano de Zonas Reguladas, los módulos no deben estar a una distancia menor de 20.0 m uno del otro.",
+    "restricciones": [
+      "No deben obstruir el libre tránsito peatonal ni la visibilidad vehicular.",
+      "Deben ubicarse fuera del área de seguridad de cables e instalaciones eléctricas.",
+      "Los módulos deben ser rodantes.",
+      "No se autoriza comercio informal en vehículos motorizados."
+    ],
+    "fuentes": [
+      "Ordenanza N° 108-2012-MDP/C, Artículo 17",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 17.4"
+    ]
+  },
+  "restricciones_y_prohibiciones": [
+    {
+      "descripcion": "La autorización es personal e intransferible.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7"
+    },
+    {
+      "descripcion": "La autorización no otorga derecho de propiedad, posesión o permanencia sobre el espacio público.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 8A"
+    },
+    {
+      "descripcion": "La actividad debe realizarse de forma personal y exclusiva por el comerciante autorizado.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7"
+    },
+    {
+      "descripcion": "La autorización se limita al giro autorizado y a una ubicación determinada.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7"
+    },
+    {
+      "descripcion": "No se debe ejercer comercio en zonas rígidas o prohibidas.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "No se autoriza comercio informal en vehículos motorizados.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 17"
+    }
+  ],
+  "reemplazo_temporal_y_asistente": {
+    "descripcion": "Excepcionalmente puede autorizarse reemplazo temporal o asistente, según los supuestos establecidos en la norma.",
+    "reemplazo_temporal": {
+      "plazo_maximo": "Hasta 30 días calendario al año.",
+      "causales": [
+        "Enfermedad eventual o tratamiento prolongado debidamente comprobado.",
+        "Permiso pre-natal o post-natal.",
+        "Matrimonio o fallecimiento de familiar hasta segundo grado de consanguinidad o afinidad.",
+        "Viajes fuera de la provincia de Lima justificados por enfermedad o fallecimiento de familiar hasta segundo grado de consanguinidad o afinidad."
+      ]
+    },
+    "asistente": {
+      "aplica_para": "Conductor autorizado que acredite condición de persona con discapacidad y/o adulta mayor.",
+      "restriccion": "El asistente no adquiere la condición de comerciante regulado."
+    },
+    "requisitos": [
+      "Solicitud presentada por el conductor autorizado.",
+      "Documento que acredite la causal para reemplazo temporal o asistente.",
+      "Copia del DNI de la persona que actuará como reemplazo temporal o asistente."
+    ],
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 7"
+  },
+  "incumplimiento_de_pago_sisa": {
+    "descripcion": "Si el comerciante autorizado no paga la SISA por dos meses consecutivos o no consecutivos injustificados, se procede al retiro del módulo hasta que cumpla con cancelar la deuda.",
+    "consecuencia_reiterada": "Si la misma situación ocurre por tercera vez, se procede al retiro definitivo del módulo y a la revocación de la autorización municipal.",
+    "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 38"
+  },
+  "causales_de_revocatoria": [
+    {
+      "descripcion": "Comercializar mercadería de dudosa procedencia, robada, adulterada, falsificada, de contrabando o en mal estado de conservación.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Ejercer comercio ambulatorio en zona restringida o declarada como zona rígida.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Ejercer comercio en estado de ebriedad o bajo efectos de sustancias tóxicas o alucinógenas.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Comercializar, expender o consumir bebidas alcohólicas.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Agredir verbal o físicamente a la Policía Municipal, funcionarios municipales u otras autoridades.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Arrojar aguas servidas o residuos sólidos en la vía pública.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Haber proporcionado información falsa en los documentos que sustentan la autorización.",
+      "fuente": "Ordenanza N° 108-2012-MDP/C, Artículo 50"
+    },
+    {
+      "descripcion": "Incumplir el pago de SISA en los supuestos previstos por la norma.",
+      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 38"
+    }
+  ],
+  "horario": {
+    "descripcion": "La Ordenanza 108-2012 establece como horario general de uso de la vía pública de 06:00 a 23:00 horas, con supuestos especiales para determinados alimentos. Sin embargo, la autorización individual debe consignar el horario específico autorizado.",
+    "fuentes": [
+      "Ordenanza N° 108-2012-MDP/C, Artículo 11",
+      "Ordenanza N° 227-2019-MDP/C, Artículo 7A"
+    ],
+    "requiere_validacion_humana": true
+  },
+  "advertencias_para_el_bot": [
+    "No afirmar costos exactos del derecho TUPA si no están cargados en una fuente vigente.",
+    "Para preguntas sobre ubicación exacta, responder que se requiere verificar el Plano de Zonas Reguladas y evaluación del área competente.",
+    "Para preguntas sobre renovación, priorizar el Artículo 5 de la Ordenanza 227-2019 por encima del Artículo 39 de la Ordenanza 108-2012.",
+    "No exigir carné sanitario como requisito general del trámite si no aparece en el artículo 30 modificado; para alimentos, orientar sobre condiciones sanitarias del artículo 23 y registro sanitario cuando corresponda según rubro."
+  ],
+  "estado_revision": "borrador_operativo",
+  "requiere_validacion_humana": true,
+  "ultima_revision": null
+}

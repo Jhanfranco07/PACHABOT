@@ -1,0 +1,884 @@
+BASE DE CONOCIMIENTO SIMPLIFICADA PARA CHATBOT MUNICIPAL
+COMERCIO AMBULATORIO EN EL DISTRITO DE PACHACÁMAC
+Basado en la Ordenanza Municipal N.° 108-2012-MDP/C y su modificatoria Ordenanza Municipal N.° 227-2019-MDP/C.
+
+============================================================
+1. OBJETIVO DE ESTA BASE DE CONOCIMIENTO
+============================================================
+
+Este texto está redactado en lenguaje claro para que un asistente virtual municipal pueda orientar a vecinos, comerciantes y administrados sobre el trámite de comercio ambulatorio en la vía pública del distrito de Pachacámac.
+
+La idea principal es explicar la norma de forma sencilla, sin generar interpretaciones equivocadas ni vacíos legales. Cuando exista una modificación, debe tomarse en cuenta la Ordenanza Municipal N.° 227-2019-MDP/C, porque modifica partes de la Ordenanza Municipal N.° 108-2012-MDP/C.
+
+IMPORTANTE:
+El chatbot no debe decir que el permiso se aprueba automáticamente. Toda solicitud debe pasar por evaluación municipal.
+
+============================================================
+2. ¿QUÉ ES EL COMERCIO AMBULATORIO O COMERCIO EN LA VÍA PÚBLICA?
+============================================================
+
+El comercio ambulatorio o comercio en la vía pública es una actividad económica que realiza una persona natural en un espacio público autorizado por la Municipalidad.
+
+En palabras simples:
+Es cuando una persona vende productos o brinda un servicio pequeño en la calle, vereda, plaza, parque u otro espacio público, pero solo puede hacerlo si cuenta con autorización municipal vigente.
+
+No cualquier persona puede ocupar la vía pública. Primero debe solicitar autorización y la Municipalidad debe evaluar si corresponde o no.
+
+El comercio ambulatorio es una actividad excepcional, temporal y regulada. No es un derecho permanente sobre la calle ni sobre el espacio público.
+
+============================================================
+3. ¿QUÉ ES UNA AUTORIZACIÓN MUNICIPAL PARA COMERCIO AMBULATORIO?
+============================================================
+
+La autorización municipal es el documento que permite a una persona natural realizar comercio en la vía pública en una ubicación específica y con un giro específico.
+
+Debe entenderse así:
+
+- Es personal.
+- Es intransferible.
+- Es temporal.
+- Es excepcional.
+- Solo sirve para el giro autorizado.
+- Solo sirve para la ubicación autorizada.
+- No otorga propiedad sobre el espacio público.
+- No otorga posesión sobre la calle, vereda, parque o plaza.
+- No otorga derecho de permanencia indefinida.
+- No puede venderse, alquilarse, prestarse ni heredarse libremente.
+- No permite que otra persona trabaje usando el permiso del titular.
+
+Ejemplo claro:
+Si la autorización dice “venta de potajes tradicionales” en una dirección determinada, el comerciante no puede vender ropa, juguetes, artículos de limpieza u otros productos no autorizados; tampoco puede moverse a otra esquina sin autorización.
+
+============================================================
+4. ¿QUIÉN PUEDE SOLICITAR AUTORIZACIÓN?
+============================================================
+
+La autorización está dirigida a personas naturales, no a empresas.
+
+La persona debe cumplir los requisitos establecidos por la Municipalidad y debe ser evaluada. La finalidad es permitir una actividad económica de subsistencia, pero siempre cuidando el orden, la seguridad, la salud pública, el tránsito peatonal, el tránsito vehicular y la capacidad del espacio público.
+
+No basta con estar en un padrón. Estar inscrito o ser comerciante regulado no significa que automáticamente ya pueda vender en la vía pública. La persona debe solicitar la autorización municipal y esperar la evaluación correspondiente.
+
+============================================================
+5. LA AUTORIZACIÓN NO ES AUTOMÁTICA
+============================================================
+
+La autorización de comercio ambulatorio no es de aprobación automática.
+
+Esto significa que presentar una solicitud no asegura que el permiso será aprobado. La Municipalidad debe evaluar:
+
+- La persona solicitante.
+- El giro o producto que desea vender.
+- La ubicación propuesta.
+- La capacidad del espacio público.
+- Si hay muchos ambulantes en la zona.
+- Si la zona es rígida o prohibida.
+- Si la actividad afecta el tránsito peatonal o vehicular.
+- Si el módulo cumple condiciones técnicas.
+- Si el giro está permitido por la norma.
+- Si existen riesgos para la seguridad, la salud, el orden o el ornato.
+
+Si la solicitud no cumple, puede ser declarada improcedente.
+
+IMPORTANTE PARA EL CHATBOT:
+No responder “sí procede” solo porque el vecino quiere vender. Siempre indicar que la solicitud está sujeta a evaluación técnica y legal.
+
+============================================================
+6. SILENCIO ADMINISTRATIVO NEGATIVO
+============================================================
+
+El procedimiento está sujeto a silencio administrativo negativo.
+
+En lenguaje simple:
+Si una persona presenta su solicitud y la Municipalidad no responde dentro del plazo correspondiente, eso no significa que el permiso esté aprobado.
+
+No se debe interpretar el silencio como autorización.
+
+El administrado no puede decir: “como no me respondieron, ya puedo vender”. Eso no corresponde.
+
+La autorización solo existe cuando la Municipalidad emite el documento correspondiente.
+
+============================================================
+7. VIGENCIA DEL PERMISO
+============================================================
+
+La autorización municipal tiene una vigencia temporal.
+
+De acuerdo con la modificatoria, el plazo de vigencia puede ser de un año, y vence el mismo día y mes del año siguiente de haberse emitido la autorización.
+
+Ejemplo:
+Si el permiso se emite el 02 de junio de 2026, puede vencer el 02 de junio de 2027, siempre que la autorización haya sido otorgada por ese periodo y se cumplan las condiciones establecidas.
+
+El permiso no necesariamente termina en diciembre. Si la norma señala un año, puede pasar al siguiente año o a una nueva gestión municipal.
+
+Sin embargo, eso no significa que el comerciante pueda incumplir las condiciones del permiso. La Municipalidad puede fiscalizar y, si corresponde, revocar, suspender o dejar sin efecto la autorización conforme a la norma.
+
+============================================================
+8. RENOVACIÓN DEL PERMISO
+============================================================
+
+La renovación debe solicitarse con anticipación antes del vencimiento del permiso.
+
+La norma indica que la renovación puede solicitarse treinta días antes del vencimiento, previa evaluación técnica y legal.
+
+Esto significa:
+
+- No es automática.
+- Debe ser evaluada.
+- El comerciante debe estar al día con sus obligaciones.
+- Debe cumplir el giro autorizado.
+- Debe respetar la ubicación autorizada.
+- Debe mantener condiciones de orden, limpieza, seguridad y salubridad.
+- Debe presentar los documentos que correspondan.
+
+No procede la renovación presentada después del vencimiento del permiso, salvo que una norma específica disponga algo distinto.
+
+IMPORTANTE:
+La renovación no es un derecho automático. La Municipalidad evalúa si corresponde renovar.
+
+============================================================
+9. DIFERENCIA ENTRE VIGENCIA DEL PERMISO Y PAGO DE SISA
+============================================================
+
+La vigencia del permiso y el pago de SISA son temas relacionados, pero no son lo mismo.
+
+VIGENCIA:
+Es el tiempo por el cual se otorga la autorización.
+
+PAGO:
+Es la obligación económica que debe cumplir el comerciante autorizado por usar el espacio público.
+
+La norma indica que el pago de SISA debe hacerse de forma adelantada, y puede realizarse de dos maneras:
+
+1. Pago adelantado anual:
+El comerciante paga por adelantado todo el periodo autorizado.
+
+2. Pago fraccionado por mes:
+El comerciante paga mes por mes, pero cada mes debe pagarse por adelantado.
+
+Esto NO significa que el comerciante pueda esperar hasta el final del año para pagar todo junto.
+
+Interpretación correcta:
+Si el permiso dura un año, el pago puede ser anual adelantado o mensual adelantado.
+
+Interpretación incorrecta:
+“Como mi permiso dura un año, puedo pagar todo al final”.
+Eso no corresponde, porque la norma habla de pago adelantado.
+
+============================================================
+10. ¿SE PUEDE EXIGIR EL ÚLTIMO VOUCHER DE PAGO?
+============================================================
+
+Sí, se puede solicitar el último voucher de pago como medio para verificar que el comerciante se encuentra al día.
+
+El voucher permite comprobar que el comerciante cumplió con pagar la SISA correspondiente.
+
+Para renovación o continuidad de la autorización, es razonable verificar que el administrado no tenga pagos pendientes.
+
+Mensaje claro para el ciudadano:
+“Para evaluar su renovación, debe presentar su último comprobante de pago, porque la Municipalidad debe verificar que se encuentre al día con la obligación de SISA.”
+
+============================================================
+11. ¿EL COMERCIANTE PUEDE PAGAR TODO DÍAS ANTES DE QUE VENZA SU PERMISO?
+============================================================
+
+La norma no dice que el comerciante pueda esperar hasta días antes del vencimiento para pagar todo lo pendiente.
+
+Lo que la norma señala es que el pago debe realizarse de forma adelantada, ya sea anual o fraccionada por mes.
+
+Por lo tanto:
+
+- Si paga anual, debe pagar el año por adelantado.
+- Si paga mensual, debe pagar cada mes por adelantado.
+- No corresponde acumular meses impagos y luego pretender regularizar al final como si eso fuera la regla.
+
+El chatbot debe responder:
+“No se debe esperar hasta el final del periodo. El pago de SISA debe estar al día y realizarse de forma adelantada, según la modalidad elegida.”
+
+============================================================
+12. ¿QUÉ PASA SI EL COMERCIANTE NO PAGA?
+============================================================
+
+El incumplimiento de pago puede generar medidas administrativas, conforme a la norma.
+
+Si el comerciante no paga la SISA o no acredita el pago correspondiente, la Municipalidad puede realizar acciones de control, solicitar regularización, retirar el módulo o iniciar las medidas que correspondan según la normativa aplicable.
+
+La autorización no permite trabajar sin pagar.
+
+El comerciante debe conservar sus comprobantes de pago y mostrarlos cuando la Municipalidad o la Policía Municipal los solicite.
+
+============================================================
+13. REQUISITOS GENERALES PARA SOLICITAR AUTORIZACIÓN O RENOVACIÓN
+============================================================
+
+De manera general, para solicitar autorización o renovación se debe presentar:
+
+- Solicitud según formato de la Municipalidad.
+- Declaración jurada, cuando corresponda.
+- Fotografías tamaño carné, cuando corresponda.
+- Comprobante de pago establecido en el TUPA o pago aplicable según la normativa vigente.
+- Último voucher de pago de SISA, cuando se trate de renovación o verificación de continuidad.
+- Otros documentos que la Municipalidad requiera según el caso.
+
+IMPORTANTE:
+Los requisitos pueden variar según el procedimiento, el tipo de trámite y la norma vigente. El chatbot debe orientar, pero la evaluación final corresponde a la Subgerencia competente.
+
+============================================================
+14. ¿QUÉ EVALÚA LA MUNICIPALIDAD ANTES DE DAR EL PERMISO?
+============================================================
+
+La Municipalidad evalúa varios aspectos:
+
+- Que el solicitante sea persona natural.
+- Que no tenga más de una autorización.
+- Que el giro esté permitido.
+- Que la ubicación sea viable.
+- Que no sea zona rígida o prohibida.
+- Que no afecte el tránsito peatonal.
+- Que no afecte el tránsito vehicular.
+- Que no afecte la seguridad.
+- Que no afecte la salud pública.
+- Que no afecte el ornato.
+- Que no genere desorden.
+- Que no exista saturación de comerciantes en la zona.
+- Que el módulo cumpla con las características técnicas.
+- Que la actividad sea compatible con el espacio público.
+- Que no se use vehículo motorizado para vender.
+- Que no se invada más espacio del permitido.
+
+============================================================
+15. ZONAS AUTORIZADAS, ZONAS REGULADAS Y ZONAS RÍGIDAS
+============================================================
+
+No todos los espacios públicos pueden ser usados para comercio ambulatorio.
+
+Existen:
+
+ZONAS AUTORIZADAS O REGULADAS:
+Son lugares donde la Municipalidad puede permitir comercio ambulatorio, previa evaluación.
+
+ZONAS RÍGIDAS O PROHIBIDAS:
+Son lugares donde no se autoriza comercio ambulatorio por razones de seguridad, ordenamiento urbano, ornato, tránsito, salubridad o protección del espacio público.
+
+En una zona rígida no corresponde otorgar autorización.
+
+============================================================
+16. ZONAS DONDE NO DEBE AUTORIZARSE COMERCIO AMBULATORIO
+============================================================
+
+La Municipalidad puede negar permisos en zonas como:
+
+- Avenidas principales, cuando la norma o evaluación lo restrinja.
+- Vías locales no reguladas.
+- Áreas verdes.
+- Centro histórico.
+- Alrededores de monumentos.
+- Parques, plazas o plazuelas no autorizadas.
+- Zonas cercanas a instituciones públicas o privadas donde se afecte el orden, tránsito o seguridad.
+- Instituciones educativas, centros de salud u otros espacios sensibles, según evaluación.
+- Zonas de alto tránsito peatonal o vehicular.
+- Zonas con alta concentración de ambulantes.
+- Lugares donde se reduzca la libre circulación.
+- Lugares donde se ponga en riesgo a peatones, conductores o comerciantes.
+
+La Ordenanza N.° 227-2019-MDP/C considera como zonas rígidas o prohibidas, entre otras:
+- El tramo del Jirón Miguel Grau entre la Av. Víctor Malásquez y la Av. Manchay.
+- La Av. Manchay cuadras 7 y 8, entre la Av. 1° de Mayo y la Calle 57.
+
+Por eso, si una persona solicita vender en Miguel Grau dentro de ese tramo, el chatbot debe advertir que la zona es rígida/prohibida y que la solicitud podría ser improcedente.
+
+============================================================
+17. AVENIDA VÍCTOR MALÁSQUEZ Y VÍAS PRINCIPALES
+============================================================
+
+Cuando la solicitud se refiere a la Av. Víctor Malásquez u otra vía principal, la evaluación debe ser más cuidadosa.
+
+La Municipalidad debe considerar:
+- Transitabilidad.
+- Seguridad vial.
+- Libre circulación peatonal.
+- Libre circulación vehicular.
+- Ordenamiento urbano.
+- Concentración de comerciantes.
+- Cercanía a paraderos, cruces, esquinas o zonas de alta congestión.
+- Riesgo de expansión del comercio ambulatorio.
+
+No se debe autorizar si la actividad puede afectar el flujo vehicular, el tránsito peatonal, la seguridad o el orden público.
+
+El chatbot debe responder:
+“Las solicitudes en vías principales requieren evaluación estricta. No basta con que haya espacio aparente; se debe verificar si la ubicación no afecta el tránsito, la seguridad ni el ordenamiento del sector.”
+
+============================================================
+18. MÓDULO DE VENTA
+============================================================
+
+El módulo es el mobiliario usado por el comerciante para desarrollar la actividad autorizada.
+
+Debe ser:
+- Desmontable.
+- Movible.
+- Adecuado al giro.
+- Ubicado solo en el espacio autorizado.
+- Retirado al finalizar la jornada, cuando corresponda.
+- De dimensiones compatibles con la norma y evaluación municipal.
+- Usado solo para el giro autorizado.
+
+El comerciante no puede ampliar el módulo sin autorización.
+
+No puede colocar mesas, sillas, toldos, estructuras, vitrinas, cajas, bancos o elementos adicionales si no están autorizados.
+
+============================================================
+19. PROHIBICIÓN DE USAR VEHÍCULOS MOTORIZADOS
+============================================================
+
+No se debe autorizar comercio ambulatorio en vehículos motorizados.
+
+Esto incluye vender desde:
+- Mototaxi.
+- Motocar.
+- Auto.
+- Camioneta.
+- Moto.
+- Otro vehículo motorizado.
+
+Si una persona usa un vehículo motorizado para exhibir o vender productos, la solicitud puede ser declarada improcedente.
+
+Mensaje claro:
+“No se puede autorizar venta ambulatoria usando vehículo motorizado. El comercio debe realizarse mediante módulo autorizado, según las condiciones de la Municipalidad.”
+
+============================================================
+20. SOLO SE PUEDE VENDER EL GIRO AUTORIZADO
+============================================================
+
+El comerciante solo puede vender lo que aparece en su autorización.
+
+No puede cambiar de giro por cuenta propia.
+
+Ejemplos:
+- Si tiene permiso para potajes tradicionales, no puede vender ropa.
+- Si tiene permiso para golosinas, no puede vender juguetes.
+- Si tiene permiso para frutas, no puede vender artículos de limpieza.
+- Si tiene permiso para emoliente, no puede convertir el puesto en bodega.
+- Si tiene permiso para desayuno, no puede vender bebidas alcohólicas.
+
+El giro autorizado debe estar dentro de los rubros permitidos por la norma.
+
+============================================================
+21. GIROS O RUBROS PERMITIDOS
+============================================================
+
+La Ordenanza N.° 227-2019-MDP/C reorganiza los rubros permitidos para comercio en la vía pública.
+
+Los rubros permitidos son:
+
+RUBRO 1: GOLOSINAS Y AFINES
+Incluye golosinas y productos afines, debidamente envasados, con registro sanitario y fecha vigente cuando corresponda.
+
+RUBRO 2: FRUTAS, VERDURAS Y PRODUCTOS NATURALES
+Incluye venta de frutas, verduras y productos naturales, siempre que cumplan condiciones de higiene y autorización.
+
+RUBRO 3: PRODUCTOS PREPARADOS AL DÍA
+Incluye:
+- Bebidas saludables, como emoliente, quinua, maca, soya y similares.
+- Potajes tradicionales.
+- Dulces tradicionales.
+- Sándwiches.
+- Jugo de naranja y similares.
+- Canchitas, confitería y similares.
+
+RUBRO 4: OBJETOS DE USO DURADERO
+Incluye:
+- Mercería.
+- Artículos de bazar.
+- Útiles de escritorio.
+- Diarios, revistas, libros, loterías.
+- Monedas, estampillas.
+- Artesanías.
+- Artículos religiosos.
+- Artículos de limpieza.
+- Artistas plásticos o retratistas.
+- Fotografías.
+
+RUBRO 5: SERVICIOS
+Incluye:
+- Duplicado de llaves.
+- Cerrajería.
+- Lustrado de calzado.
+
+IMPORTANTE:
+Si un producto no está en estos rubros, no debe asumirse automáticamente que procede. Debe evaluarse si encaja legalmente en un rubro permitido.
+
+============================================================
+22. GIROS QUE USUALMENTE NO PROCEDEN SI NO ESTÁN EN LA NORMA
+============================================================
+
+No deben considerarse procedentes de forma automática los giros que no están expresamente contemplados.
+
+Ejemplos de giros que pueden ser improcedentes:
+- Venta de ropa.
+- Venta de juguetes, si no encaja en rubro permitido.
+- Venta de accesorios femeninos, si no encaja en rubro permitido.
+- Venta de jabones terapéuticos o medicinales, si no encaja como artículo permitido.
+- Venta de productos variados tipo tienda ambulante.
+- Venta de bebidas alcohólicas.
+- Venta de medicinas.
+- Venta de materiales de construcción.
+- Venta de repuestos o partes automotrices.
+- Reparaciones mecánicas, eléctricas o similares.
+- Juegos de azar o apuestas.
+- Venta de artículos pornográficos.
+- Venta de productos falsificados, adulterados o de procedencia ilícita.
+
+El chatbot debe decir:
+“El giro solicitado debe estar dentro de los rubros permitidos. Si no está contemplado o no se puede encuadrar claramente, la solicitud puede ser declarada improcedente.”
+
+============================================================
+23. VENTA DE ALIMENTOS PREPARADOS
+============================================================
+
+La venta de alimentos preparados está permitida solo si se encuentra dentro del rubro autorizado y cumple condiciones sanitarias.
+
+El comerciante debe:
+- Mantener los alimentos en buen estado.
+- Usar envases adecuados.
+- Usar recipientes limpios, conservados y con tapa o cubierta.
+- Mantener higiene personal.
+- Usar indumentaria adecuada cuando corresponda.
+- Evitar manipulación antihigiénica.
+- No preparar alimentos de forma riesgosa en la vía pública.
+- Cumplir controles posteriores de salubridad.
+
+El hecho de vender comida no significa que todo tipo de comida esté permitido.
+
+Por ejemplo:
+“Potajes tradicionales” no debe interpretarse como restaurante completo en la vía pública. Si la persona quiere vender menú completo todos los días, con mesas, sillas o atención tipo restaurante, eso no corresponde al comercio ambulatorio regulado.
+
+============================================================
+24. VENTA DE POTAJES TRADICIONALES
+============================================================
+
+La venta de potajes tradicionales puede estar dentro del rubro de productos preparados al día.
+
+Sin embargo, debe entenderse como venta regulada en módulo autorizado, no como restaurante en la vía pública.
+
+No debe implicar:
+- Instalación de mesas y sillas.
+- Ocupación extensa del espacio público.
+- Preparación masiva como local de comida.
+- Uso de varios módulos.
+- Permanencia desordenada de clientes.
+- Afectación del tránsito.
+
+Si el giro se presenta como “menú”, “comida criolla completa” o actividad similar a restaurante, debe evaluarse con cuidado y puede ser improcedente si excede lo permitido para comercio ambulatorio.
+
+============================================================
+25. GOLOSINAS, GASEOSAS, SNACKS Y PRODUCTOS VARIADOS
+============================================================
+
+La venta de golosinas y afines puede estar permitida, pero debe respetar límites.
+
+No debe convertirse en una tienda ambulante con todo tipo de productos.
+
+Si el comerciante vende golosinas, gaseosas, snacks, artículos de higiene, productos de limpieza, juguetes y otros productos mezclados, la Municipalidad puede observarlo porque no se ajusta claramente a un solo giro autorizado.
+
+El chatbot debe orientar:
+“Debe precisar el giro principal y vender únicamente productos compatibles con el rubro autorizado.”
+
+============================================================
+26. VENTA DE ROPA
+============================================================
+
+La venta de ropa no aparece como giro permitido dentro de los rubros autorizables para comercio ambulatorio según la Ordenanza N.° 227-2019-MDP/C.
+
+Por ello, una solicitud para venta de ropa en vía pública puede ser declarada improcedente por no estar contemplada como giro autorizado.
+
+Respuesta sugerida del chatbot:
+“La venta de ropa no se encuentra contemplada dentro de los rubros autorizables para comercio ambulatorio. Por ello, la solicitud estaría sujeta a evaluación y podría ser declarada improcedente.”
+
+============================================================
+27. VENTA DE JUGUETES
+============================================================
+
+La venta de juguetes no aparece expresamente como rubro permitido en la regulación de comercio ambulatorio.
+
+Por ello, no debe afirmarse que procede automáticamente.
+
+Si se solicita vender juguetes en vía pública, se debe indicar que el giro no está contemplado claramente dentro de los rubros autorizados y que la solicitud puede ser improcedente.
+
+Además, si se solicita vender en plaza, parque o espacio no destinado a comercio ambulatorio, también puede ser improcedente por ubicación.
+
+============================================================
+28. ARTÍCULOS DE LIMPIEZA E HIGIENE PERSONAL
+============================================================
+
+La norma contempla “artículos de limpieza” dentro de objetos de uso duradero.
+
+Sin embargo, no todo producto de higiene personal equivale automáticamente a artículo de limpieza.
+
+Ejemplo:
+Jabones terapéuticos, productos medicinales, cosméticos o productos con finalidad de salud no deben encuadrarse automáticamente como artículos de limpieza.
+
+Deben evaluarse caso por caso.
+
+El chatbot debe evitar decir que cualquier jabón, crema, producto terapéutico o producto de higiene personal está permitido.
+
+============================================================
+29. BEBIDAS ALCOHÓLICAS
+============================================================
+
+No se permite la venta o consumo de bebidas alcohólicas dentro del comercio ambulatorio regulado.
+
+Si se detecta venta de alcohol, la autorización puede ser denegada, anulada o sancionada según corresponda.
+
+El chatbot debe responder:
+“La venta de bebidas alcohólicas no corresponde al comercio ambulatorio autorizado.”
+
+============================================================
+30. MEDICINAS Y PRODUCTOS DE SALUD
+============================================================
+
+No corresponde la venta ambulatoria de medicinas.
+
+También debe tenerse cuidado con productos terapéuticos o medicinales, porque podrían no encajar dentro de los rubros permitidos.
+
+El chatbot debe orientar:
+“Para productos medicinales o terapéuticos, no corresponde asumir procedencia como comercio ambulatorio. La venta de medicinas está prohibida y otros productos de salud deben ser evaluados por la autoridad competente.”
+
+============================================================
+31. NO SE PERMITE TENER MÁS DE UNA AUTORIZACIÓN
+============================================================
+
+Ninguna persona debe ser titular de más de una autorización municipal de comercio ambulatorio, aunque sea para giros distintos.
+
+La autorización es individual y está destinada al titular.
+
+No se permite usar una autorización para manejar varios puestos.
+
+============================================================
+32. NO SE PERMITE EMPLEAR A OTROS VENDEDORES
+============================================================
+
+El comercio ambulatorio regulado es personal.
+
+No corresponde que el titular actúe como empleador de otros vendedores ambulantes.
+
+Tampoco corresponde que el permiso sea usado por otra persona que no es el titular.
+
+============================================================
+33. NO SE PUEDE ALQUILAR, VENDER O TRASPASAR EL PERMISO
+============================================================
+
+La autorización no puede venderse, alquilarse, prestarse ni traspasarse.
+
+Si el titular permite que otra persona use su permiso, puede perder la autorización.
+
+La autorización no es un bien privado; es un permiso temporal otorgado por la Municipalidad.
+
+============================================================
+34. UBICACIÓN AUTORIZADA
+============================================================
+
+El comerciante solo puede trabajar en la ubicación indicada en su autorización.
+
+No puede moverse a otra esquina, avenida, parque, plaza o frontis sin autorización municipal.
+
+Si necesita cambiar de lugar, debe solicitar reubicación y esperar evaluación.
+
+La reubicación tampoco es automática. La Municipalidad debe verificar si el nuevo punto es viable.
+
+============================================================
+35. REUBICACIÓN
+============================================================
+
+La reubicación puede evaluarse cuando exista una razón justificada, como:
+- Obstáculos en el lugar autorizado.
+- Riesgo para el comerciante o peatones.
+- Conflictos por uso del espacio.
+- Reordenamiento municipal.
+- Condiciones que impiden el normal desarrollo de la actividad.
+
+Pero la Municipalidad debe verificar el nuevo punto mediante evaluación y, de ser necesario, visita in situ.
+
+Si se aprueba la reubicación, debe emitirse una nueva autorización o documento actualizado con la nueva ubicación.
+
+============================================================
+36. FALTA DE USO DEL ESPACIO AUTORIZADO
+============================================================
+
+Si el comerciante no usa el espacio autorizado por un periodo prolongado sin justificación, la Municipalidad puede evaluar el cese de la autorización.
+
+La autorización se otorga para trabajar en una ubicación, no para reservar el espacio sin usarlo.
+
+Si el titular no cuenta con módulo o no aprovecha el espacio, la Municipalidad puede considerar que no se cumplen las condiciones para mantener o renovar la autorización.
+
+============================================================
+37. FERIAS
+============================================================
+
+Las ferias son actividades temporales de promoción comercial.
+
+Tienen como finalidad fomentar bienes y servicios, especialmente de micro y pequeñas empresas.
+
+Las ferias:
+- Son temporales.
+- No deben exceder el plazo permitido por la norma.
+- Requieren autorización.
+- Se realizan en espacios públicos regulados.
+- Están sujetas a evaluación técnica y legal.
+- No equivalen a comercio ambulatorio permanente.
+
+El comerciante feriante solo puede participar en el espacio, fecha, horario y giro autorizado.
+
+============================================================
+38. DIFERENCIA ENTRE COMERCIO AMBULATORIO Y FERIA
+============================================================
+
+COMERCIO AMBULATORIO:
+Es la actividad individual, temporal y excepcional de una persona autorizada para vender en un punto específico de la vía pública.
+
+FERIA:
+Es una actividad organizada y temporal donde participan varios feriantes en un espacio determinado y por un periodo específico.
+
+No debe confundirse una autorización de feria con una autorización de comercio ambulatorio permanente.
+
+============================================================
+39. PARQUES Y PLAZAS
+============================================================
+
+Los parques, plazas y plazuelas son espacios públicos destinados principalmente al tránsito, recreación y uso común de los vecinos.
+
+No toda plaza o parque puede ser usado para comercio.
+
+Si se permite actividad comercial en parques o plazas, normalmente debe ser bajo una autorización específica, como feria o servicio TUSNE aplicable, y en zonas delimitadas.
+
+No corresponde que un comerciante se instale libremente en cualquier parte del parque o plaza.
+
+============================================================
+40. CONTROL Y FISCALIZACIÓN
+============================================================
+
+La Municipalidad puede fiscalizar el comercio ambulatorio.
+
+La fiscalización puede verificar:
+- Autorización vigente.
+- Identidad del titular.
+- Giro autorizado.
+- Ubicación autorizada.
+- Dimensiones del módulo.
+- Condiciones de higiene.
+- Comprobante de pago vigente.
+- Uso del espacio público.
+- Presencia de mesas, sillas u otros elementos no autorizados.
+- Venta de productos no permitidos.
+- Uso de vehículo motorizado.
+- Afectación al tránsito o al orden.
+
+El comerciante debe colaborar con la fiscalización y mostrar sus documentos cuando se le solicite.
+
+============================================================
+41. POLICÍA MUNICIPAL
+============================================================
+
+La Policía Municipal puede realizar acciones de control y seguimiento del comercio ambulatorio.
+
+Puede solicitar:
+- Permiso municipal.
+- DNI del titular.
+- Voucher de pago vigente.
+- Verificación del giro.
+- Verificación de ubicación.
+- Verificación del módulo.
+
+Si detecta incumplimientos, puede informar para que la autoridad competente adopte las medidas correspondientes.
+
+============================================================
+42. CAUSALES DE IMPROCEDENCIA
+============================================================
+
+Una solicitud puede ser improcedente cuando:
+
+- El giro no está permitido.
+- La ubicación es zona rígida o prohibida.
+- La ubicación afecta tránsito peatonal.
+- La ubicación afecta tránsito vehicular.
+- La ubicación afecta seguridad ciudadana.
+- La ubicación afecta salubridad.
+- La ubicación afecta ornato.
+- Hay alta concentración de ambulantes.
+- Se pretende vender en vehículo motorizado.
+- Se pretende ocupar más espacio del permitido.
+- Se solicita vender productos prohibidos.
+- Se quiere vender productos variados sin giro definido.
+- La persona ya tiene otra autorización.
+- La persona no cumple requisitos.
+- No se acredita pago o documentación requerida.
+- Se solicita renovación fuera de plazo.
+- Se detecta que el permiso sería usado por otra persona.
+- No se cuenta con módulo adecuado.
+- El espacio público no garantiza condiciones para la actividad.
+
+============================================================
+43. CAUSALES DE REVOCATORIA O PÉRDIDA DEL PERMISO
+============================================================
+
+La autorización puede perderse o ser revocada cuando el comerciante incumple la norma.
+
+Ejemplos:
+- Declaraciones falsas.
+- No presentar documentación solicitada.
+- No respetar horario o giro autorizado.
+- Alterar el módulo sin autorización.
+- Vender productos no autorizados.
+- Alquilar, vender o traspasar el permiso.
+- Permitir que otra persona use la autorización.
+- No pagar la SISA correspondiente.
+- No usar el espacio autorizado sin justificación.
+- Ocupar más área de la autorizada.
+- Usar vehículo motorizado.
+- Generar desorden, riesgo o afectación a vecinos.
+- Incumplir disposiciones sanitarias.
+- Instalar mesas, sillas u otros elementos no autorizados.
+- Trabajar en zona distinta a la autorizada.
+
+============================================================
+44. MENSAJES MODELO PARA EL CHATBOT
+============================================================
+
+PREGUNTA:
+“¿Puedo vender en la calle?”
+
+RESPUESTA:
+“Para vender en la vía pública necesita una autorización municipal. La solicitud no se aprueba automáticamente; debe pasar por evaluación técnica y legal. Se revisa el giro, la ubicación, el módulo, la seguridad, el tránsito y si la zona está permitida.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Si presento mi solicitud ya puedo vender?”
+
+RESPUESTA:
+“No. Presentar la solicitud no autoriza a vender. Debe esperar el pronunciamiento de la Municipalidad. Este trámite es de evaluación previa y no es de aprobación automática.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿El permiso dura un año?”
+
+RESPUESTA:
+“La autorización puede tener vigencia de un año, según corresponda y de acuerdo con la evaluación municipal. Sin embargo, debe cumplir las condiciones del permiso y mantenerse al día con sus pagos.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Puedo pagar al final del año?”
+
+RESPUESTA:
+“No. El pago de SISA debe realizarse de forma adelantada. Puede pagarse todo el año por adelantado o fraccionado mes por mes, pero cada mes debe pagarse por adelantado.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Por qué me piden el último voucher?”
+
+RESPUESTA:
+“Se solicita el último voucher para verificar que usted se encuentra al día en el pago de SISA. Este comprobante es importante para evaluar la renovación o continuidad de la autorización.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Puedo vender ropa?”
+
+RESPUESTA:
+“La venta de ropa no se encuentra contemplada dentro de los rubros autorizables para comercio ambulatorio. Por ello, su solicitud estaría sujeta a evaluación y podría ser declarada improcedente.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Puedo vender en Miguel Grau?”
+
+RESPUESTA:
+“Debe evaluarse la ubicación exacta. La Ordenanza N.° 227-2019-MDP/C considera como zona rígida o prohibida el tramo del Jirón Miguel Grau entre Av. Víctor Malásquez y Av. Manchay, por lo que en ese tramo no corresponde autorizar comercio ambulatorio.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Puedo vender desde mi mototaxi?”
+
+RESPUESTA:
+“No. No se autoriza comercio ambulatorio en vehículos motorizados. La venta debe realizarse mediante módulo autorizado y cumpliendo las condiciones municipales.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Puedo usar otro lugar si mi punto está ocupado?”
+
+RESPUESTA:
+“No puede cambiarse de ubicación por cuenta propia. Debe solicitar reubicación y la Municipalidad evaluará si el nuevo punto es viable.”
+
+------------------------------------------------------------
+
+PREGUNTA:
+“¿Puedo poner mesas y sillas?”
+
+RESPUESTA:
+“Solo puede usar los elementos autorizados. No debe colocar mesas, sillas u otros elementos adicionales si no están permitidos, porque puede ocupar más espacio público del autorizado y afectar el tránsito.”
+
+============================================================
+45. REGLAS PARA QUE EL CHATBOT NO SE EQUIVOQUE
+============================================================
+
+1. No decir que el permiso es automático.
+2. No decir que presentar solicitud permite vender.
+3. No decir que el silencio de la Municipalidad aprueba el permiso.
+4. No decir que el comerciante puede pagar al final del año.
+5. No decir que el pago mensual se hace después de trabajar el mes.
+6. No decir que estar en padrón equivale a tener permiso vigente.
+7. No decir que todo producto puede venderse si el vecino lo necesita.
+8. No decir que ropa, juguetes o accesorios femeninos proceden automáticamente.
+9. No decir que se puede vender desde vehículos motorizados.
+10. No decir que el comerciante puede moverse libremente a otra ubicación.
+11. No decir que el permiso da propiedad o posesión sobre la vía pública.
+12. No decir que el permiso se puede alquilar, vender o prestar.
+13. No decir que se puede tener más de una autorización.
+14. No decir que se puede vender productos distintos al giro autorizado.
+15. No decir que se puede ocupar más espacio del autorizado.
+16. No decir que parques y plazas son libres para vender.
+17. No decir que toda comida equivale a potajes tradicionales.
+18. No decir que vender menú completo es automáticamente permitido.
+19. No decir que artículos terapéuticos o medicinales son artículos de limpieza.
+20. Siempre indicar que la evaluación final corresponde a la Municipalidad.
+
+============================================================
+46. CRITERIO CENTRAL PARA RESPONDER CONSULTAS
+============================================================
+
+El chatbot debe aplicar esta lógica:
+
+Primero:
+¿La persona tiene autorización municipal vigente?
+
+Segundo:
+¿El giro está permitido?
+
+Tercero:
+¿La ubicación está permitida?
+
+Cuarto:
+¿El módulo cumple condiciones?
+
+Quinto:
+¿El comerciante está al día en pagos?
+
+Sexto:
+¿La actividad afecta tránsito, seguridad, salubridad, ornato o genera desorden?
+
+Si alguna respuesta es negativa, el chatbot debe decir que la solicitud puede ser observada o declarada improcedente, y que debe ser evaluada por la Subgerencia competente.
+
+============================================================
+47. RESPUESTA FINAL GENERAL PARA ORIENTACIÓN
+============================================================
+
+“Para realizar comercio ambulatorio en el distrito de Pachacámac se requiere autorización municipal vigente. La autorización es personal, temporal e intransferible, y solo permite vender el giro autorizado en la ubicación autorizada. La solicitud está sujeta a evaluación técnica y legal; no es automática. Además, el comerciante debe cumplir con el pago de SISA de forma adelantada, ya sea anual o fraccionada por mes, y debe conservar sus comprobantes de pago. La Municipalidad puede fiscalizar el cumplimiento de la autorización y adoptar medidas si se incumplen las condiciones establecidas.”
+
+============================================================
+FIN DEL DOCUMENTO
+============================================================

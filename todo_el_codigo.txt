@@ -1,0 +1,4178 @@
+
+# === app\__init__.py ===
+"""Application package for the Telegram municipal assistant prototype."""
+
+# === app\api\__init__.py ===
+"""API-facing models and route helpers."""
+
+# === app\api\schemas.py ===
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+
+class ChatRequest(BaseModel):
+    """HTTP payload for channel-agnostic chat requests."""
+
+    channel: str = "api"
+    session_id: str = "api-session"
+    user_id: str = "api-user"
+    text: str = Field(min_length=1)
+    user_display_name: str = ""
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class ChatResponse(BaseModel):
+    """HTTP response returned by the assistant API."""
+
+    answer: str
+    sources: list[str]
+    intent: str
+    in_domain: bool
+    confidence: float
+    used_llm: bool
+
+
+class ConversationResetRequest(BaseModel):
+    """Payload used to clear a stored conversation session."""
+
+    channel: str
+    session_id: str
+
+
+class ConversationResetResponse(BaseModel):
+    """Response returned after a conversation reset."""
+
+    status: str
+    channel: str
+    session_id: str
+
+# === app\bot\__init__.py ===
+"""Telegram bot package."""
+
+# === app\bot\handlers.py ===
+from __future__ import annotations
+
+from telegram import Update
+from telegram.error import TimedOut
+from telegram.ext import ContextTypes
+
+from app.bot.keyboards import build_main_keyboard
+from app.channels.telegram import build_incoming_message
+
+
+MAX_TELEGRAM_MESSAGE_LEN = 3200
+
+WELCOME_MESSAGE = (
+    "Hola. Soy un asistente virtual especializado en comercio ambulatorio.\n\n"
+    "Puedo orientarte con consultas sobre requisitos, autorizaciones, modulos, "
+    "zonas rigidas, ferias, SISA y articulos de las ordenanzas 108-2012-MDP/C "
+    "y 227-2019-MDP/C.\n\n"
+    "Trabajo con memoria conversacional por chat. Si luego haces una pregunta "
+    "de seguimiento, intentare entenderla usando el contexto previo.\n\n"
+    "Si la base documental no respalda una respuesta con claridad, te lo dire "
+    "con honestidad."
+)
+
+
+async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /start."""
+
+    if update.message is None:
+        return
+    await update.message.reply_text(WELCOME_MESSAGE, reply_markup=build_main_keyboard())
+
+
+async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /help."""
+
+    if update.message is None:
+        return
+    await update.message.reply_text(
+        "Puedes preguntarme, por ejemplo:\n"
+        "- Que requisitos necesito\n"
+        "- Cuanto mide un modulo\n"
+        "- Cuanto se paga de SISA\n"
+        "- Que zonas son rigidas\n"
+        "- Que dice el articulo 7\n"
+        "- Explicame la autorizacion municipal\n\n"
+        "Comandos utiles:\n"
+        "/reset para borrar el contexto de este chat\n"
+        "/estado para ver el modo actual del asistente"
+    )
+
+
+async def reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /reset and clear the current chat memory."""
+
+    if update.effective_chat is None or update.message is None:
+        return
+
+    assistant = context.application.bot_data["assistant_service"]
+    assistant.reset_conversation("telegram", str(update.effective_chat.id))
+    await update.message.reply_text(
+        "Listo. Borre el contexto conversacional de este chat. "
+        "La siguiente consulta empezara como una conversacion nueva."
+    )
+
+
+async def status_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /estado and show a short runtime status."""
+
+    if update.message is None:
+        return
+
+    assistant = context.application.bot_data["assistant_service"]
+    await _send_text_safely(update, assistant.get_runtime_status())
+
+
+async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Resolve user free-text messages."""
+
+    incoming = build_incoming_message(update)
+    if incoming is None:
+        return
+
+    assistant = context.application.bot_data["assistant_service"]
+    payload = assistant.answer_chat_message(incoming)
+
+    response = payload.answer.strip()
+    if payload.sources:
+        response += "\n\nFuente(s): " + "; ".join(payload.sources[:3])
+
+    await _send_text_safely(update, response)
+
+
+async def _send_text_safely(update: Update, text: str) -> None:
+    """Send long responses in smaller chunks and retry once on timeout."""
+
+    if update.message is None:
+        return
+
+    for part in _split_message(text):
+        try:
+            await update.message.reply_text(part)
+        except TimedOut:
+            await update.message.reply_text(part)
+
+
+def _split_message(text: str, limit: int = MAX_TELEGRAM_MESSAGE_LEN) -> list[str]:
+    """Split a long Telegram response by paragraph boundaries."""
+
+    compact = text.strip()
+    if len(compact) <= limit:
+        return [compact]
+
+    parts: list[str] = []
+    current = ""
+    for paragraph in compact.split("\n\n"):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        candidate = f"{current}\n\n{paragraph}".strip() if current else paragraph
+        if len(candidate) <= limit:
+            current = candidate
+            continue
+
+        if current:
+            parts.append(current)
+
+        while len(paragraph) > limit:
+            parts.append(paragraph[:limit].rstrip())
+            paragraph = paragraph[limit:].lstrip()
+        current = paragraph
+
+    if current:
+        parts.append(current)
+    return parts
+
+# === app\bot\keyboards.py ===
+from __future__ import annotations
+
+from telegram import ReplyKeyboardMarkup
+
+
+def build_main_keyboard() -> ReplyKeyboardMarkup:
+    """Provide example citizen queries."""
+
+    return ReplyKeyboardMarkup(
+        [
+            ["Que requisitos necesito", "Cuanto mide un modulo"],
+            ["Cuanto se paga de SISA", "Que zonas son rigidas"],
+            ["Que dice el articulo 7", "Explicame la autorizacion"],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=False,
+    )
+
+# === app\bot\telegram_bot.py ===
+from __future__ import annotations
+
+import logging
+
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
+from app.bot.handlers import (
+    help_handler,
+    message_handler,
+    reset_handler,
+    start_handler,
+    status_handler,
+)
+from app.services.assistant_service import AssistantService
+
+
+def build_telegram_application(
+    token: str,
+    assistant_service: AssistantService,
+    logger: logging.Logger,
+) -> Application:
+    """Create and configure the Telegram bot application."""
+
+    app = (
+        Application.builder()
+        .token(token)
+        .connect_timeout(20)
+        .read_timeout(30)
+        .write_timeout(30)
+        .pool_timeout(20)
+        .build()
+    )
+    app.bot_data["assistant_service"] = assistant_service
+
+    app.add_handler(CommandHandler("start", start_handler))
+    app.add_handler(CommandHandler("help", help_handler))
+    app.add_handler(CommandHandler("reset", reset_handler))
+    app.add_handler(CommandHandler("estado", status_handler))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+
+    logger.getChild("telegram_bot").info("Aplicacion de Telegram configurada")
+    return app
+
+# === app\channels\__init__.py ===
+"""Channel adapters and shared channel schemas."""
+
+# === app\channels\schemas.py ===
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass(slots=True)
+class IncomingChatMessage:
+    channel: str
+    session_id: str
+    user_id: str
+    text: str
+    user_display_name: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+# === app\channels\telegram.py ===
+from __future__ import annotations
+
+from telegram import Update
+
+from app.channels.schemas import IncomingChatMessage
+
+
+def build_incoming_message(update: Update) -> IncomingChatMessage | None:
+    """Convert a Telegram update into a channel-agnostic chat message."""
+
+    if update.effective_message is None or not update.effective_message.text:
+        return None
+
+    chat = update.effective_chat
+    user = update.effective_user
+    return IncomingChatMessage(
+        channel="telegram",
+        session_id=str(chat.id) if chat else "telegram-unknown",
+        user_id=str(user.id) if user else "telegram-user-unknown",
+        text=update.effective_message.text.strip(),
+        user_display_name=user.full_name if user else "",
+        metadata={
+            "chat_type": chat.type if chat else "",
+            "message_id": update.effective_message.message_id,
+            "username": user.username if user else "",
+        },
+    )
+
+# === app\config.py ===
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
+
+def _env_as_bool(name: str, default: bool = False) -> bool:
+    """Parse a boolean environment variable in a forgiving way."""
+
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on", "si"}
+
+
+@dataclass(slots=True)
+class Settings:
+    """Centralized application settings."""
+
+    app_name: str = "Asistente de Comercio Ambulatorio"
+    app_env: str = os.getenv("APP_ENV", "development")
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "mock")
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    grok_api_key: str = os.getenv("GROK_API_KEY", "")
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")
+    grok_base_url: str = os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "local-tfidf")
+    chat_model: str = os.getenv("CHAT_MODEL", "grok-4")
+    llm_mode: str = os.getenv("LLM_MODE", "mock")
+    allow_general_chat: bool = _env_as_bool("ALLOW_GENERAL_CHAT", False)
+    retrieval_top_k: int = int(os.getenv("RETRIEVAL_TOP_K", "4"))
+    chunk_size: int = int(os.getenv("CHUNK_SIZE", "700"))
+    chunk_overlap: int = int(os.getenv("CHUNK_OVERLAP", "120"))
+    confidence_threshold: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.12"))
+    memory_history_limit: int = int(os.getenv("MEMORY_HISTORY_LIMIT", "12"))
+    memory_max_turns: int = int(os.getenv("MEMORY_MAX_TURNS", "40"))
+    assistant_max_sources: int = int(os.getenv("ASSISTANT_MAX_SOURCES", "3"))
+    raw_data_dir: Path = BASE_DIR / "data" / "raw"
+    processed_data_dir: Path = BASE_DIR / "data" / "processed"
+    vectorstore_dir: Path = BASE_DIR / "data" / "vectorstore"
+    conversations_dir: Path = BASE_DIR / "data" / "processed" / "conversations"
+    processed_chunks_file: Path = BASE_DIR / "data" / "processed" / "chunks.json"
+    vectorizer_file: Path = BASE_DIR / "data" / "vectorstore" / "tfidf_vectorizer.joblib"
+    matrix_file: Path = BASE_DIR / "data" / "vectorstore" / "tfidf_matrix.joblib"
+
+
+def get_settings() -> Settings:
+    """Build and return settings."""
+
+    return Settings()
+
+# === app\core\__init__.py ===
+"""Core utilities package."""
+
+# === app\core\logger.py ===
+from __future__ import annotations
+
+import logging
+from logging import Logger
+
+
+def setup_logging(level: str = "INFO") -> Logger:
+    """Configure a simple root logger for the prototype."""
+
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+    return logging.getLogger("municipal_assistant")
+
+# === app\core\prompts.py ===
+from __future__ import annotations
+
+from typing import Iterable
+
+from app.models.schemas import ConversationTurn, RetrievedChunk
+
+
+SYSTEM_PROMPT = """Eres un asistente municipal especializado en comercio ambulatorio.
+
+Tu trabajo es responder como una persona que realmente entendio las ordenanzas, no como un motor que pega parrafos.
+
+Reglas obligatorias:
+1. Responde solo en espanol.
+2. Explica con tus propias palabras y con tono claro, cercano y profesional.
+3. No uses frases como "segun la evidencia recuperada" o "la norma senala que" salvo que sean estrictamente necesarias.
+4. No copies bloques largos del documento. Si citas algo, que sea breve y util.
+5. Si el historial muestra una repregunta, interpreta el contexto antes de responder.
+6. Si el usuario plantea un caso practico, analiza el caso y responde con criterio: que parece permitido, que parece prohibido y que tendria que confirmarse.
+7. Si la informacion documental no alcanza, dilo con honestidad y sugiere verificarlo con la municipalidad.
+8. Si tienes fuentes claras, puedes mencionarlas de forma breve al final, pero no conviertas la respuesta en una lista tecnica.
+"""
+
+
+GENERAL_CHAT_SYSTEM_PROMPT = """Eres un asistente general en espanol.
+
+Responde con naturalidad, claridad y tono humano.
+No suenes robotico.
+Si no sabes algo con certeza, dilo con honestidad.
+"""
+
+
+QUERY_REWRITE_SYSTEM_PROMPT = """Reescribe preguntas de ciudadanos para mejorar la busqueda en ordenanzas municipales sobre comercio ambulatorio.
+
+Reglas:
+1. Devuelve una sola pregunta reformulada.
+2. Resuelve pronombres o referencias vagas usando el historial.
+3. Si la pregunta ya es clara, devuelvela casi igual.
+4. No expliques nada. No uses comillas. No agregues etiquetas.
+"""
+
+
+def build_context_block(chunks: Iterable[RetrievedChunk]) -> str:
+    """Render a compact reference block for the answer model."""
+
+    parts: list[str] = []
+    for chunk in chunks:
+        header = chunk.source_title
+        if chunk.article_label:
+            header += f", Art. {chunk.article_label}"
+        elif chunk.section_title:
+            header += f", {chunk.section_title}"
+        parts.append(f"[{header}]\n{chunk.text}")
+    return "\n\n---\n\n".join(parts)
+
+
+def _history_messages(history: list[ConversationTurn], *, limit: int = 8) -> list[dict[str, str]]:
+    """Convert recent history into provider-compatible chat messages."""
+
+    messages: list[dict[str, str]] = []
+    for turn in history[-limit:]:
+        role = "assistant" if turn.role == "assistant" else "user"
+        messages.append({"role": role, "content": turn.text})
+    return messages
+
+
+def build_answer_messages(
+    question: str,
+    chunks: list[RetrievedChunk],
+    history: list[ConversationTurn],
+) -> list[dict[str, str]]:
+    """Build messages for municipal answer generation."""
+
+    messages = _history_messages(history)
+
+    if not chunks:
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"Pregunta actual: {question}\n\n"
+                    "No se recuperaron fragmentos documentales suficientemente claros. "
+                    "Si puedes orientar sin inventar, hazlo. Si no, di con honestidad que "
+                    "la base disponible no basta para responder con seguridad."
+                ),
+            }
+        )
+        return messages
+
+    context_block = build_context_block(chunks[:4])
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Documentos de referencia:\n\n"
+                f"{context_block}\n\n"
+                "---\n\n"
+                f"Pregunta actual: {question}\n\n"
+                "Responde de forma natural, con sintesis propia y sin pegar el documento."
+            ),
+        }
+    )
+    return messages
+
+
+def build_general_chat_messages(
+    question: str,
+    history: list[ConversationTurn],
+) -> list[dict[str, str]]:
+    """Build messages for unrestricted general chat."""
+
+    messages = _history_messages(history)
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
+def build_query_rewrite_messages(
+    question: str,
+    history: list[ConversationTurn],
+) -> list[dict[str, str]]:
+    """Build messages for query rewriting."""
+
+    messages = _history_messages(history, limit=6)
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Reformula esta pregunta para buscar mejor en las ordenanzas, "
+                "quitando ambiguedades y usando el contexto si hace falta:\n"
+                f"{question}"
+            ),
+        }
+    )
+    return messages
+
+# === app\main.py ===
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from fastapi import FastAPI
+
+from app.api.schemas import (
+    ChatRequest,
+    ChatResponse,
+    ConversationResetRequest,
+    ConversationResetResponse,
+)
+from app.channels.schemas import IncomingChatMessage
+from app.config import Settings, get_settings
+from app.core.logger import setup_logging
+from app.memory.conversation_store import ConversationMemoryStore
+from app.services.assistant_service import AssistantService
+from app.services.document_service import DocumentService
+from app.services.llm_service import LLMService
+from app.services.query_router import QueryRouter
+from app.services.query_rewriter import QueryRewriter
+from app.services.retrieval_service import RetrievalService
+from app.tools.document_toolkit import DocumentToolkit
+
+
+@dataclass(slots=True)
+class AppContainer:
+    settings: Settings
+    assistant_service: AssistantService
+    document_service: DocumentService
+    retrieval_service: RetrievalService
+    memory_store: ConversationMemoryStore
+    document_toolkit: DocumentToolkit
+    query_rewriter: QueryRewriter
+
+
+def build_container() -> AppContainer:
+    """Compose the application services."""
+
+    settings = get_settings()
+    logger = setup_logging(settings.log_level)
+
+    router = QueryRouter()
+    llm_service = LLMService(settings, logger)
+    retrieval_service = RetrievalService(settings, logger)
+    retrieval_service.load_index()
+    memory_store = ConversationMemoryStore(settings, logger)
+    query_rewriter = QueryRewriter(settings, llm_service, logger)
+    document_toolkit = DocumentToolkit(settings, retrieval_service, query_rewriter, logger)
+    document_service = DocumentService(settings, logger)
+    assistant_service = AssistantService(
+        settings=settings,
+        router=router,
+        document_toolkit=document_toolkit,
+        llm_service=llm_service,
+        memory_store=memory_store,
+        logger=logger,
+    )
+    return AppContainer(
+        settings=settings,
+        assistant_service=assistant_service,
+        document_service=document_service,
+        retrieval_service=retrieval_service,
+        memory_store=memory_store,
+        document_toolkit=document_toolkit,
+        query_rewriter=query_rewriter,
+    )
+
+
+container = build_container()
+app = FastAPI(title=container.settings.app_name, version="0.2.0")
+
+
+@app.get("/health")
+def healthcheck() -> dict[str, str]:
+    """Basic health endpoint."""
+
+    return {"status": "ok", "environment": container.settings.app_env}
+
+
+@app.get("/info")
+def info() -> dict[str, object]:
+    """Describe the current prototype scope."""
+
+    return {
+        "name": container.settings.app_name,
+        "scope": "Consultas ciudadanas sobre comercio ambulatorio",
+        "documents": [
+            "Ordenanza 108-2012-MDP/C",
+            "Ordenanza 227-2019-MDP/C",
+        ],
+        "channels": ["telegram", "api"],
+        "memory_enabled": True,
+        "tools": ["query_rewrite", "document_search"],
+    }
+
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(payload: ChatRequest) -> ChatResponse:
+    """Channel-agnostic endpoint to test the assistant outside Telegram."""
+
+    result = container.assistant_service.answer_chat_message(
+        IncomingChatMessage(
+            channel=payload.channel,
+            session_id=payload.session_id,
+            user_id=payload.user_id,
+            text=payload.text,
+            user_display_name=payload.user_display_name,
+            metadata=payload.metadata,
+        )
+    )
+    return ChatResponse(
+        answer=result.answer,
+        sources=result.sources,
+        intent=result.intent.value,
+        in_domain=result.in_domain,
+        confidence=result.confidence,
+        used_llm=result.used_llm,
+    )
+
+
+@app.post("/chat/reset", response_model=ConversationResetResponse)
+def reset_chat(payload: ConversationResetRequest) -> ConversationResetResponse:
+    """Reset a conversation memory session."""
+
+    container.assistant_service.reset_conversation(payload.channel, payload.session_id)
+    return ConversationResetResponse(
+        status="ok",
+        channel=payload.channel,
+        session_id=payload.session_id,
+    )
+
+# === app\memory\__init__.py ===
+"""Conversation memory abstractions."""
+
+# === app\memory\conversation_store.py ===
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from app.config import Settings
+from app.models.schemas import ConversationTurn
+from app.utils.helpers import ensure_directory, read_json, write_json
+
+
+class ConversationMemoryStore:
+    """Simple file-based memory store for per-session conversation history."""
+
+    def __init__(self, settings: Settings, logger) -> None:
+        self.settings = settings
+        self.logger = logger.getChild("conversation_memory")
+        ensure_directory(self.settings.conversations_dir)
+
+    def load_history(self, channel: str, session_id: str) -> list[ConversationTurn]:
+        """Load the full conversation history for a channel session."""
+
+        path = self._build_session_path(channel, session_id)
+        if not path.exists():
+            return []
+
+        try:
+            payload = read_json(path)
+            return [ConversationTurn(**item) for item in payload]
+        except Exception as exc:
+            self.logger.warning(
+                "No se pudo leer la memoria de %s/%s: %s",
+                channel,
+                session_id,
+                exc,
+            )
+            return []
+
+    def get_recent_history(
+        self,
+        channel: str,
+        session_id: str,
+        *,
+        limit: int | None = None,
+    ) -> list[ConversationTurn]:
+        """Return the last N turns for the session."""
+
+        history = self.load_history(channel, session_id)
+        if limit is None:
+            limit = self.settings.memory_history_limit
+        return history[-limit:]
+
+    def append_turn(self, channel: str, session_id: str, turn: ConversationTurn) -> None:
+        """Append a single turn and trim old memory."""
+
+        history = self.load_history(channel, session_id)
+        history.append(turn)
+        max_turns = self.settings.memory_max_turns
+        trimmed_history = history[-max_turns:]
+        write_json(self._build_session_path(channel, session_id), trimmed_history)
+
+    def reset_session(self, channel: str, session_id: str) -> None:
+        """Delete a session memory file if it exists."""
+
+        path = self._build_session_path(channel, session_id)
+        if path.exists():
+            path.unlink()
+
+    def _build_session_path(self, channel: str, session_id: str) -> Path:
+        """Build the conversation file path for the given session."""
+
+        safe_channel = _slugify(channel)
+        safe_session = _slugify(session_id)
+        return self.settings.conversations_dir / f"{safe_channel}_{safe_session}.json"
+
+
+def _slugify(value: str) -> str:
+    """Make a filesystem-safe slug from any identifier."""
+
+    return re.sub(r"[^a-zA-Z0-9_-]+", "_", value).strip("_") or "session"
+
+# === app\models\__init__.py ===
+"""Domain and schema models package."""
+
+# === app\models\domain.py ===
+from __future__ import annotations
+
+from enum import Enum
+
+
+class QueryIntent(str, Enum):
+    GENERAL = "general"
+    REQUISITOS = "requisitos"
+    MODULOS = "modulos"
+    PAGOS_SISA = "pagos_sisa"
+    ZONAS_RIGIDAS = "zonas_rigidas"
+    AUTORIZACIONES = "autorizaciones"
+    FERIAS = "ferias"
+    PROHIBICIONES = "prohibiciones"
+    OUT_OF_SCOPE = "out_of_scope"
+
+# === app\models\schemas.py ===
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+from app.models.domain import QueryIntent
+
+
+@dataclass(slots=True)
+class DocumentChunk:
+    chunk_id: str
+    document_id: str
+    source_title: str
+    text: str
+    section_title: str = ""
+    article_label: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class RetrievedChunk:
+    chunk_id: str
+    document_id: str
+    source_title: str
+    text: str
+    score: float
+    section_title: str = ""
+    article_label: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class RoutedQuery:
+    original_query: str
+    normalized_query: str
+    intent: QueryIntent
+    in_domain: bool
+    matched_keywords: list[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class AnswerPayload:
+    answer: str
+    sources: list[str]
+    intent: QueryIntent
+    in_domain: bool
+    confidence: float
+    used_llm: bool
+
+
+@dataclass(slots=True)
+class ConversationTurn:
+    role: str
+    text: str
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class KnowledgeBundle:
+    original_query: str
+    effective_query: str
+    chunks: list[RetrievedChunk]
+    confidence: float
+    sources: list[str]
+    notes: list[str] = field(default_factory=list)
+    search_queries: list[str] = field(default_factory=list)
+    tools_used: list[str] = field(default_factory=list)
+
+# === app\services\__init__.py ===
+"""Service layer package."""
+
+# === app\services\assistant_service.py ===
+from __future__ import annotations
+
+import logging
+
+from app.channels.schemas import IncomingChatMessage
+from app.config import Settings
+from app.memory.conversation_store import ConversationMemoryStore
+from app.models.domain import QueryIntent
+from app.models.schemas import AnswerPayload, ConversationTurn
+from app.services.llm_service import LLMService
+from app.services.query_router import QueryRouter
+from app.tools.document_toolkit import DocumentToolkit
+from app.utils.text_cleaner import normalize_for_search
+
+
+GREETING_MARKERS = (
+    "hola",
+    "buenas",
+    "buenos dias",
+    "buenas tardes",
+    "buenas noches",
+    "que tal",
+)
+
+THANKS_MARKERS = (
+    "gracias",
+    "muchas gracias",
+    "ok gracias",
+    "vale gracias",
+)
+
+ACKNOWLEDGEMENT_MARKERS = (
+    "si",
+    "sí",
+    "si ayudame",
+    "sí ayudame",
+    "si, ayudame",
+    "sí, ayudame",
+    "ayudame",
+    "ayúdame",
+    "dale",
+    "ok",
+    "okay",
+    "claro",
+    "continua",
+    "continúa",
+    "sigue",
+)
+
+
+class AssistantService:
+    """Main conversational orchestrator for all supported chat channels."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        router: QueryRouter,
+        document_toolkit: DocumentToolkit,
+        llm_service: LLMService,
+        memory_store: ConversationMemoryStore,
+        logger: logging.Logger,
+    ) -> None:
+        self.settings = settings
+        self.router = router
+        self.document_toolkit = document_toolkit
+        self.llm_service = llm_service
+        self.memory_store = memory_store
+        self.logger = logger.getChild("assistant_service")
+
+    def answer_chat_message(self, message: IncomingChatMessage) -> AnswerPayload:
+        """Resolve a channel-agnostic incoming message into a safe answer."""
+
+        question = message.text.strip()
+        normalized_question = normalize_for_search(question)
+        history = self.memory_store.get_recent_history(
+            message.channel,
+            message.session_id,
+            limit=self.settings.memory_history_limit,
+        )
+
+        if self._is_greeting(normalized_question):
+            answer = (
+                "Hola. Puedo ayudarte con comercio ambulatorio"
+                + (
+                    " y, en este modo, tambien conversar de temas generales."
+                    if self.settings.allow_general_chat
+                    else "."
+                )
+            )
+            return self._remember_social_reply(message, question, answer)
+
+        if self._is_thanks(normalized_question):
+            return self._remember_social_reply(
+                message,
+                question,
+                "Con gusto. Si quieres, seguimos con otra consulta.",
+            )
+
+        if self._is_acknowledgement(normalized_question):
+            return self._remember_social_reply(
+                message,
+                question,
+                (
+                    "Claro. Dime una consulta concreta y yo intento interpretarla. "
+                    "Por ejemplo: que necesito para vender, que dice el articulo 7 "
+                    "o cuanto se paga de SISA."
+                ),
+            )
+
+        memory_payload = self._answer_from_memory_if_applicable(normalized_question, history)
+        if memory_payload is not None:
+            self._remember_exchange(message, question, memory_payload)
+            return memory_payload
+
+        prepared_question, preparation_notes = self.document_toolkit.prepare_query(question)
+        routed = self.router.route(prepared_question)
+        knowledge = self.document_toolkit.gather_knowledge(
+            prepared_question,
+            routed,
+            history,
+            original_question=question,
+            preparation_notes=preparation_notes,
+        )
+
+        has_document_context = bool(knowledge.chunks) and (
+            knowledge.confidence >= self.settings.confidence_threshold
+        )
+        if has_document_context:
+            answer, used_llm = self.llm_service.generate_answer(
+                knowledge.effective_query,
+                knowledge.chunks,
+                history=history,
+            )
+            payload = self._build_payload(
+                answer=answer,
+                sources=knowledge.sources[: self.settings.assistant_max_sources],
+                confidence=knowledge.confidence,
+                used_llm=used_llm,
+                in_domain=True,
+                intent=routed.intent if routed.intent != QueryIntent.OUT_OF_SCOPE else QueryIntent.GENERAL,
+            )
+            self._remember_exchange(message, question, payload)
+            return payload
+
+        if self.settings.allow_general_chat and not routed.in_domain:
+            answer, used_llm = self.llm_service.generate_general_answer(
+                question,
+                history=history,
+            )
+            payload = self._build_payload(
+                answer=answer,
+                sources=[],
+                confidence=0.25 if used_llm else 0.15,
+                used_llm=used_llm,
+                in_domain=False,
+                intent=QueryIntent.OUT_OF_SCOPE,
+            )
+            self._remember_exchange(message, question, payload)
+            return payload
+
+        if not routed.in_domain:
+            payload = self._build_payload(
+                answer=(
+                    "Por ahora solo atiendo consultas sobre comercio ambulatorio "
+                    "basadas en las ordenanzas municipales cargadas."
+                ),
+                sources=[],
+                confidence=0.0,
+                used_llm=False,
+                in_domain=False,
+                intent=QueryIntent.OUT_OF_SCOPE,
+            )
+            self._remember_exchange(message, question, payload)
+            return payload
+
+        answer, used_llm = self.llm_service.generate_answer(
+            knowledge.effective_query,
+            [],
+            history=history,
+        )
+        payload = self._build_payload(
+            answer=answer,
+            sources=[],
+            confidence=knowledge.confidence,
+            used_llm=used_llm,
+            in_domain=True,
+            intent=routed.intent,
+        )
+        self._remember_exchange(message, question, payload)
+        return payload
+
+    def answer_user_query(self, question: str) -> AnswerPayload:
+        """Convenience wrapper for local/API usage without a Telegram update."""
+
+        return self.answer_chat_message(
+            IncomingChatMessage(
+                channel="local",
+                session_id="local-default",
+                user_id="local-user",
+                text=question,
+            )
+        )
+
+    def reset_conversation(self, channel: str, session_id: str) -> None:
+        """Clear stored memory for a specific conversation session."""
+
+        self.memory_store.reset_session(channel, session_id)
+
+    def get_runtime_status(self) -> str:
+        """Expose a short runtime summary for operational commands."""
+
+        llm_mode = "externo" if self.llm_service.client is not None else "fallback local"
+        chunk_count = len(self.document_toolkit.retrieval_service.chunks)
+        return (
+            f"Canal activo: Telegram\n"
+            f"Modo de respuesta: {llm_mode}\n"
+            f"Proveedor configurado: {self.settings.llm_provider}\n"
+            f"Modelo configurado: {self.settings.chat_model}\n"
+            f"Modo libre fuera de dominio: {'si' if self.settings.allow_general_chat else 'no'}\n"
+            f"Fragmentos indexados: {chunk_count}\n"
+            f"Memoria por sesion: hasta {self.settings.memory_max_turns} turnos"
+        )
+
+    def _build_payload(
+        self,
+        *,
+        answer: str,
+        sources: list[str],
+        confidence: float,
+        used_llm: bool,
+        in_domain: bool,
+        intent: QueryIntent,
+    ) -> AnswerPayload:
+        """Create a normalized answer payload."""
+
+        return AnswerPayload(
+            answer=answer.strip(),
+            sources=sources,
+            intent=intent,
+            in_domain=in_domain,
+            confidence=confidence,
+            used_llm=used_llm,
+        )
+
+    def _remember_social_reply(
+        self,
+        message: IncomingChatMessage,
+        question: str,
+        answer: str,
+    ) -> AnswerPayload:
+        """Store a social or operational reply in memory."""
+
+        payload = self._build_payload(
+            answer=answer,
+            sources=[],
+            confidence=1.0,
+            used_llm=False,
+            in_domain=True,
+            intent=QueryIntent.GENERAL,
+        )
+        self._remember_exchange(message, question, payload)
+        return payload
+
+    def _remember_exchange(
+        self,
+        message: IncomingChatMessage,
+        user_text: str,
+        payload: AnswerPayload,
+    ) -> None:
+        """Persist the user and assistant turns for follow-up questions."""
+
+        session_metadata = {
+            "user_id": message.user_id,
+            "user_display_name": message.user_display_name,
+            "channel_metadata": message.metadata,
+        }
+        self.memory_store.append_turn(
+            message.channel,
+            message.session_id,
+            ConversationTurn(
+                role="user",
+                text=user_text,
+                metadata=session_metadata,
+            ),
+        )
+        self.memory_store.append_turn(
+            message.channel,
+            message.session_id,
+            ConversationTurn(
+                role="assistant",
+                text=payload.answer,
+                metadata={
+                    "sources": payload.sources,
+                    "confidence": payload.confidence,
+                    "used_llm": payload.used_llm,
+                },
+            ),
+        )
+
+    def _is_greeting(self, normalized_question: str) -> bool:
+        """Detect short greeting-only messages."""
+
+        return any(
+            normalized_question == marker or normalized_question.startswith(f"{marker} ")
+            for marker in GREETING_MARKERS
+        )
+
+    def _is_thanks(self, normalized_question: str) -> bool:
+        """Detect simple acknowledgement messages."""
+
+        return any(
+            normalized_question == marker or normalized_question.startswith(f"{marker} ")
+            for marker in THANKS_MARKERS
+        )
+
+    def _is_acknowledgement(self, normalized_question: str) -> bool:
+        """Detect generic confirmations that are not actual document questions."""
+
+        return any(
+            normalized_question == marker or normalized_question.startswith(f"{marker} ")
+            for marker in ACKNOWLEDGEMENT_MARKERS
+        )
+
+    def _answer_from_memory_if_applicable(
+        self,
+        normalized_question: str,
+        history: list[ConversationTurn],
+    ) -> AnswerPayload | None:
+        """Answer simple chat-history questions directly from memory."""
+
+        if not history:
+            return None
+
+        asks_first_question = any(
+            marker in normalized_question
+            for marker in (
+                "que te pregunte primero",
+                "que te dije primero",
+                "cual fue mi primera pregunta",
+                "que te pregunte al comienzo",
+            )
+        )
+        if asks_first_question:
+            first_user_turn = next(
+                (
+                    turn
+                    for turn in history
+                    if turn.role == "user"
+                    and not self._is_greeting(normalize_for_search(turn.text))
+                    and not self._is_acknowledgement(normalize_for_search(turn.text))
+                ),
+                None,
+            )
+            answer = (
+                "Todavia no tengo una pregunta previa clara en este chat."
+                if first_user_turn is None
+                else f'La primera consulta clara que me hiciste en este tramo del chat fue: "{first_user_turn.text}".'
+            )
+            return self._build_payload(
+                answer=answer,
+                sources=[],
+                confidence=1.0,
+                used_llm=False,
+                in_domain=True,
+                intent=QueryIntent.GENERAL,
+            )
+
+        asks_last_answer = any(
+            marker in normalized_question
+            for marker in (
+                "que me respondiste",
+                "que dijiste",
+                "que me acabas de decir",
+                "que respondiste",
+            )
+        )
+        if asks_last_answer:
+            last_assistant_turn = next((turn for turn in reversed(history) if turn.role == "assistant"), None)
+            answer = (
+                "Todavia no tengo una respuesta previa registrada en este chat."
+                if last_assistant_turn is None
+                else f'Lo ultimo que te respondi fue: "{last_assistant_turn.text}".'
+            )
+            return self._build_payload(
+                answer=answer,
+                sources=[],
+                confidence=1.0,
+                used_llm=False,
+                in_domain=True,
+                intent=QueryIntent.GENERAL,
+            )
+
+        return None
+
+# === app\services\document_service.py ===
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+
+from app.config import Settings
+from app.models.schemas import DocumentChunk
+from app.utils.chunking import split_text_into_chunks
+from app.utils.helpers import ensure_directory, write_json
+from app.utils.text_cleaner import clean_text
+
+
+DOCUMENT_TITLES = {
+    "ordenanza_108_2012": "Ordenanza 108-2012-MDP/C",
+    "ordenanza_227_2019": "Ordenanza 227-2019-MDP/C",
+}
+
+
+class DocumentService:
+    """Read, clean and chunk source documents."""
+
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
+        self.settings = settings
+        self.logger = logger.getChild("document_service")
+
+    def discover_raw_documents(self) -> list[Path]:
+        """Return supported text documents found in the raw data directory."""
+
+        ensure_directory(self.settings.raw_data_dir)
+        return sorted(self.settings.raw_data_dir.glob("*.txt"))
+
+    def build_chunks(self) -> list[DocumentChunk]:
+        """Generate chunks from all raw documents and persist the processed output."""
+
+        documents = self.discover_raw_documents()
+        all_chunks: list[DocumentChunk] = []
+
+        if not documents:
+            self.logger.warning("No se encontraron documentos en %s", self.settings.raw_data_dir)
+            return all_chunks
+
+        for file_path in documents:
+            document_id = file_path.stem
+            source_title = DOCUMENT_TITLES.get(document_id, file_path.stem.replace("_", " ").title())
+            raw_text = file_path.read_text(encoding="utf-8")
+            cleaned_text = clean_text(raw_text)
+            chunks = split_text_into_chunks(
+                cleaned_text,
+                document_id=document_id,
+                source_title=source_title,
+                chunk_size=self.settings.chunk_size,
+                overlap=self.settings.chunk_overlap,
+            )
+            self.logger.info("Documento %s dividido en %s chunks", file_path.name, len(chunks))
+            all_chunks.extend(chunks)
+
+        ensure_directory(self.settings.processed_data_dir)
+        write_json(self.settings.processed_chunks_file, all_chunks)
+        self.logger.info("Chunks procesados guardados en %s", self.settings.processed_chunks_file)
+        return all_chunks
+
+# === app\services\llm_service.py ===
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass, field
+
+from app.config import Settings
+from app.core.prompts import (
+    GENERAL_CHAT_SYSTEM_PROMPT,
+    QUERY_REWRITE_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    build_answer_messages,
+    build_general_chat_messages,
+    build_query_rewrite_messages,
+)
+from app.models.schemas import ConversationTurn, RetrievedChunk
+from app.utils.text_cleaner import normalize_for_search
+
+try:
+    from openai import OpenAI
+except ImportError:  # pragma: no cover
+    OpenAI = None
+
+
+CURRENCY_PATTERN = re.compile(r"S/\s*\.?\s*\d+(?:\.\d+)?", re.IGNORECASE)
+MEASURE_PATTERN = re.compile(r"\b(\d+(?:[.,]\d+)?)\s*(m|metros?|dias|meses|anos)\b", re.IGNORECASE)
+ARTICLE_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+[A-Z]?)", re.IGNORECASE)
+SPANISH_STOPWORDS = {
+    "que",
+    "cual",
+    "como",
+    "cuando",
+    "donde",
+    "cuanto",
+    "una",
+    "uno",
+    "unos",
+    "unas",
+    "para",
+    "sobre",
+    "del",
+    "de",
+    "la",
+    "el",
+    "los",
+    "las",
+    "un",
+    "por",
+    "con",
+    "se",
+    "me",
+    "puedes",
+    "puede",
+    "dice",
+    "dime",
+    "explica",
+    "explicame",
+    "explicacion",
+    "norma",
+    "ordenanza",
+    "articulo",
+    "mide",
+    "pago",
+    "dura",
+    "vigencia",
+    "plazo",
+    "caso",
+    "pasa",
+    "resolver",
+    "situacion",
+    "seguimiento",
+    "osea",
+    "entonces",
+    "primero",
+}
+
+
+@dataclass(slots=True)
+class QuestionFrame:
+    kind: str
+    normalized_question: str
+    article_label: str = ""
+    subject: str = ""
+    focus_terms: list[str] = field(default_factory=list)
+    current_question: str = ""
+    wants_confirmation: bool = False
+    wants_plain_explanation: bool = False
+
+
+class LLMService:
+    """Generate answers using an external LLM when available, or a safer fallback."""
+
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
+        self.settings = settings
+        self.logger = logger.getChild("llm_service")
+        self.client = None
+        self.provider = settings.llm_provider.lower().strip()
+
+        if OpenAI is None or settings.llm_mode == "mock":
+            return
+
+        if self.provider == "grok" and settings.grok_api_key:
+            self.client = OpenAI(
+                api_key=settings.grok_api_key,
+                base_url=settings.grok_base_url,
+            )
+            return
+
+        if self.provider == "openai" and settings.openai_api_key:
+            client_kwargs: dict[str, str] = {"api_key": settings.openai_api_key}
+            if settings.openai_base_url:
+                client_kwargs["base_url"] = settings.openai_base_url
+            self.client = OpenAI(**client_kwargs)
+
+    def generate_answer(
+        self,
+        question: str,
+        chunks: list[RetrievedChunk],
+        *,
+        history: list[ConversationTurn] | None = None,
+        orchestration_notes: list[str] | None = None,
+    ) -> tuple[str, bool]:
+        """Return an answer and whether an external LLM was used."""
+
+        history = history or []
+        _ = orchestration_notes or []
+
+        if self.client is None:
+            return self._fallback_answer(question, chunks), False
+
+        try:
+            messages = build_answer_messages(question, chunks, history)
+            answer = self._call_provider(
+                system_prompt=SYSTEM_PROMPT,
+                messages=messages,
+                temperature=0.15,
+                warning_label="respuesta municipal",
+            )
+            return answer, True
+        except Exception as exc:  # pragma: no cover
+            self.logger.exception("Fallo el uso del LLM externo: %s", exc)
+            if self._should_disable_external_client(exc):
+                self.logger.warning(
+                    "Se desactivara temporalmente el proveedor externo y se continuara en fallback local."
+                )
+                self.client = None
+            return self._fallback_answer(question, chunks), False
+
+    def generate_general_answer(
+        self,
+        question: str,
+        *,
+        history: list[ConversationTurn] | None = None,
+    ) -> tuple[str, bool]:
+        """Answer a free-form question outside the municipal domain."""
+
+        history = history or []
+
+        if self.client is None:
+            return self._fallback_general_answer(question), False
+
+        try:
+            messages = build_general_chat_messages(question, history)
+            answer = self._call_provider(
+                system_prompt=GENERAL_CHAT_SYSTEM_PROMPT,
+                messages=messages,
+                temperature=0.35,
+                warning_label="chat general",
+            )
+            return answer, True
+        except Exception as exc:  # pragma: no cover
+            self.logger.exception("Fallo el chat general con el proveedor externo: %s", exc)
+            if self._should_disable_external_client(exc):
+                self.logger.warning(
+                    "Se desactivara temporalmente el proveedor externo y el chat general seguira en fallback local."
+                )
+                self.client = None
+            return self._fallback_general_answer(question), False
+
+    def rewrite_query(
+        self,
+        question: str,
+        *,
+        history: list[ConversationTurn] | None = None,
+    ) -> str:
+        """Rewrite a follow-up question into a clearer retrieval query."""
+
+        history = history or []
+
+        if self.client is None:
+            return question
+
+        try:
+            messages = build_query_rewrite_messages(question, history)
+            rewritten = self._call_provider(
+                system_prompt=QUERY_REWRITE_SYSTEM_PROMPT,
+                messages=messages,
+                temperature=0.0,
+                warning_label="query rewriting",
+            )
+            cleaned = rewritten.strip().strip("\"'")
+            first_line = cleaned.splitlines()[0].strip() if cleaned else question
+            return first_line or question
+        except Exception as exc:  # pragma: no cover
+            self.logger.exception("Fallo la reescritura de consulta con el proveedor externo: %s", exc)
+            if self._should_disable_external_client(exc):
+                self.logger.warning(
+                    "Se desactivara temporalmente el proveedor externo y la reescritura seguira en modo heuristico."
+                )
+                self.client = None
+            return question
+
+    def _call_provider(
+        self,
+        *,
+        system_prompt: str,
+        messages: list[dict[str, str]],
+        temperature: float,
+        warning_label: str,
+    ) -> str:
+        """Call the external provider using the most compatible API available."""
+
+        full_messages = [{"role": "system", "content": system_prompt}, *messages]
+
+        try:
+            response = self.client.responses.create(
+                model=self.settings.chat_model,
+                input=full_messages,
+            )
+            output_text = getattr(response, "output_text", "").strip()
+            if output_text:
+                return output_text
+        except Exception as exc:
+            self.logger.warning(
+                "Fallo el endpoint responses para %s; se intentara chat.completions: %s",
+                warning_label,
+                exc,
+            )
+
+        completion = self.client.chat.completions.create(
+            model=self.settings.chat_model,
+            messages=full_messages,
+            temperature=temperature,
+        )
+        return completion.choices[0].message.content.strip()
+
+    def _fallback_answer(
+        self,
+        question: str,
+        chunks: list[RetrievedChunk],
+    ) -> str:
+        """Build a local answer by inferring the user's intent from the question and evidence."""
+
+        frame = self._analyze_question(question)
+        evidence = self._collect_evidence(frame, chunks)
+
+        if not evidence:
+            return (
+                "Encontre informacion relacionada, pero no con la claridad suficiente "
+                "como para darte una respuesta segura en este momento."
+            )
+
+        if frame.kind == "article":
+            return self._compose_article_answer(frame, evidence)
+        if frame.kind == "definition":
+            return self._compose_definition_answer(frame, evidence)
+        if frame.kind == "case":
+            return self._compose_case_answer(frame, evidence)
+        if frame.kind == "quantity":
+            return self._compose_quantity_answer(frame, evidence)
+        if frame.kind == "procedure":
+            return self._compose_procedure_answer(evidence)
+        if frame.kind == "location":
+            return self._compose_location_answer(evidence)
+        return self._compose_general_answer(evidence)
+
+    def _fallback_general_answer(self, question: str) -> str:
+        """Offer a basic general-chat fallback when no unrestricted LLM is active."""
+
+        normalized_question = normalize_for_search(question)
+
+        if any(greeting in normalized_question for greeting in ("hola", "buenas", "que tal")):
+            return "Hola. Aqui estoy. Puedes preguntarme lo que quieras."
+
+        if "como estas" in normalized_question or "como te va" in normalized_question:
+            return "Estoy bien y listo para conversar contigo. Si quieres, probemos con una pregunta general."
+
+        if any(
+            marker in normalized_question
+            for marker in ("quien eres", "que puedes hacer", "como funcionas")
+        ):
+            return (
+                "Ahora mismo puedo conversar tambien fuera del tema municipal. "
+                "Eso si: como en este entorno no hay un LLM general activo, mi modo libre "
+                "todavia es basico comparado con ChatGPT completo."
+            )
+
+        if "chiste" in normalized_question:
+            return "Claro: por que el expediente nunca se perdio? Porque siempre estaba bien foliado."
+
+        if any(marker in normalized_question for marker in ("consejo", "recomiendame", "que opinas")):
+            return (
+                "Puedo intentarlo, pero te hablo con honestidad: para responder con libertad real "
+                "como un asistente general necesito un LLM externo activo. En este modo local puedo "
+                "mantener una conversacion basica, pero no reemplazo a ChatGPT completo."
+            )
+
+        return (
+            "Puedo abrir la conversacion a temas generales, pero para responder con total libertad "
+            "como ChatGPT normal necesito activar un proveedor LLM. En este modo local todavia estoy "
+            "limitado a respuestas generales bastante basicas."
+        )
+
+    def _analyze_question(self, question: str) -> QuestionFrame:
+        """Infer the general question type and its main subject."""
+
+        normalized_question = normalize_for_search(question)
+        current_question = question.split("Seguimiento:")[-1].strip()
+        normalized_current = normalize_for_search(current_question)
+        article_match = ARTICLE_PATTERN.search(current_question) or ARTICLE_PATTERN.search(question)
+        focus_terms = self._extract_focus_terms(normalized_question)
+        subject = " ".join(focus_terms[:3]).strip()
+        wants_confirmation = self._looks_like_confirmation(normalized_current)
+        wants_plain_explanation = any(
+            pattern in normalized_current
+            for pattern in (
+                "hablame",
+                "hablame de",
+                "explicame",
+                "cuentame",
+                "resumeme",
+                "en simple",
+                "con tus palabras",
+            )
+        )
+
+        if article_match:
+            return QuestionFrame(
+                kind="article",
+                normalized_question=normalized_question,
+                article_label=article_match.group(1).upper(),
+                subject=subject,
+                focus_terms=focus_terms,
+                current_question=normalized_current,
+                wants_confirmation=wants_confirmation,
+                wants_plain_explanation=wants_plain_explanation,
+            )
+
+        if self._looks_like_case(normalized_current) or self._looks_like_case(normalized_question):
+            kind = "case"
+        elif "sisa" in normalized_question or ("pago" in normalized_question and "tribut" in normalized_question):
+            kind = "quantity"
+        elif any(
+            pattern in normalized_current or pattern in normalized_question
+            for pattern in ("que es", "defin", "significa", "se entiende")
+        ) or wants_plain_explanation:
+            kind = "definition"
+        elif any(
+            pattern in normalized_current or pattern in normalized_question
+            for pattern in ("cuanto", "monto", "valor", "mide", "medida", "plazo", "vigencia", "dura")
+        ) or (wants_confirmation and any(token in normalized_question for token in ("sisa", "modulo", "monto", "sol"))):
+            kind = "quantity"
+        elif any(
+            pattern in normalized_current or pattern in normalized_question
+            for pattern in ("como", "requis", "tramite", "solicitud", "permiso", "autoriz")
+        ):
+            kind = "procedure"
+        elif any(
+            pattern in normalized_current or pattern in normalized_question
+            for pattern in ("donde", "zona", "ubicacion", "lugar", "via publica")
+        ):
+            kind = "location"
+        else:
+            kind = "summary"
+
+        return QuestionFrame(
+            kind=kind,
+            normalized_question=normalized_question,
+            subject=subject,
+            focus_terms=focus_terms,
+            current_question=normalized_current,
+            wants_confirmation=wants_confirmation,
+            wants_plain_explanation=wants_plain_explanation,
+        )
+
+    def _collect_evidence(
+        self,
+        frame: QuestionFrame,
+        chunks: list[RetrievedChunk],
+    ) -> list[tuple[float, str, RetrievedChunk]]:
+        """Score candidate evidence sentences using the question type and retrieved context."""
+
+        candidates: list[tuple[float, str, RetrievedChunk]] = []
+        for chunk in chunks:
+            cleaned_text = self._strip_legal_headers(chunk.text)
+            for sentence in self._split_candidates(cleaned_text):
+                score = self._score_candidate(frame, chunk, sentence)
+                if score <= 0:
+                    continue
+                candidates.append((score, sentence, chunk))
+
+        ranked = sorted(candidates, key=lambda item: item[0], reverse=True)
+        selected: list[tuple[float, str, RetrievedChunk]] = []
+        seen_sentences: set[str] = set()
+        for item in ranked:
+            fingerprint = normalize_for_search(item[1])
+            if fingerprint in seen_sentences:
+                continue
+            seen_sentences.add(fingerprint)
+            selected.append(item)
+            if len(selected) >= 3:
+                break
+        return selected
+
+    def _score_candidate(
+        self,
+        frame: QuestionFrame,
+        chunk: RetrievedChunk,
+        sentence: str,
+    ) -> float:
+        """Assign a relevance score to an evidence sentence."""
+
+        normalized_sentence = normalize_for_search(sentence)
+        if len(normalized_sentence) < 18:
+            return -1.0
+        if normalized_sentence.startswith(("titulo ", "capitulo ", "base legal")):
+            return -1.0
+
+        score = 0.1
+        if len(normalized_sentence) > 280:
+            score -= 0.20
+        overlap = sum(1 for token in frame.focus_terms if token in normalized_sentence)
+        score += overlap * 0.55
+        if frame.focus_terms and overlap == 0:
+            score -= 0.20
+
+        if frame.kind == "article" and chunk.article_label == frame.article_label:
+            score += 1.2
+
+        if frame.kind == "definition":
+            if any(marker in normalized_sentence for marker in ("se entiende por", " es la ", " es el ", "areas de la via publica")):
+                score += 1.0
+
+        if frame.kind == "case":
+            if any(
+                marker in normalized_sentence
+                for marker in (
+                    "se requiere",
+                    "autorizacion",
+                    "prohib",
+                    "no autoriza",
+                    "revoc",
+                    "retiro",
+                    "sancion",
+                    "requisitos",
+                )
+            ):
+                score += 0.9
+
+        if frame.kind == "quantity":
+            if CURRENCY_PATTERN.search(sentence) or MEASURE_PATTERN.search(sentence):
+                score += 0.9
+            if any(marker in normalized_sentence for marker in ("diario", "mensual", "anual", "meses", "metros", "m")):
+                score += 0.3
+            if "sisa" in frame.normalized_question and "sisa" in normalized_sentence:
+                score += 0.7
+            if any(marker in normalized_sentence for marker in ("numero de comprobante", "tupa", "diario oficial")):
+                score -= 0.65
+
+        if frame.kind == "procedure":
+            if any(marker in normalized_sentence for marker in ("debera", "solicitud", "presentar", "requisitos", "tramite")):
+                score += 0.8
+
+        if frame.kind == "location":
+            if any(marker in normalized_sentence for marker in ("zona", "areas", "via publica", "ubicacion", "no autoriza", "prohib")):
+                score += 0.8
+
+        if "considerando" in normalized_sentence or "por cuanto" in normalized_sentence:
+            score -= 0.5
+        if any(
+            marker in normalized_sentence
+            for marker in (
+                "facultades conferidas",
+                "senores regidores",
+                "ley n",
+                "diario oficial",
+                "tupa",
+            )
+        ):
+            score -= 0.55
+
+        return score
+
+    def _compose_article_answer(
+        self,
+        frame: QuestionFrame,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose a summary for article-specific questions."""
+
+        primary_sentence = self._humanize_sentence(evidence[0][1])
+        return (
+            f"Si lo pongo en palabras simples, el articulo {frame.article_label} dice que "
+            f"{self._ensure_sentence_starts_lower(primary_sentence)}."
+        )
+
+    def _compose_definition_answer(
+        self,
+        frame: QuestionFrame,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose a definition-like answer in plain language."""
+
+        subject = self._resolve_subject_label(frame)
+        primary_sentence = self._humanize_sentence(evidence[0][1])
+        primary_lower = self._ensure_sentence_starts_lower(primary_sentence)
+        normalized_primary = normalize_for_search(primary_sentence)
+
+        if any(
+            normalized_primary.startswith(marker)
+            for marker in ("es el ", "es la ", "es un ", "es una ")
+        ):
+            response = f"Claro. En simple, {subject} {primary_lower}"
+        elif subject in normalized_primary:
+            response = f"Claro. En simple, {primary_lower}"
+        else:
+            response = f"Claro. En simple, {subject} es {primary_lower}"
+
+        extra_fact = self._extract_currency_fact([item[1] for item in evidence]) or self._extract_measure_fact([item[1] for item in evidence])
+        if extra_fact:
+            response += f" Ademas, aparece este dato concreto: {extra_fact}."
+        return response
+
+    def _compose_case_answer(
+        self,
+        frame: QuestionFrame,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose a reasoned orientation for a practical case."""
+
+        humanized = [self._humanize_sentence(item[1]) for item in evidence]
+        first = self._ensure_sentence_starts_lower(humanized[0])
+        normalized_joined = normalize_for_search(" ".join(humanized))
+
+        if "sin autorizacion" in frame.normalized_question and "autorizacion" in normalized_joined:
+            response = f"No. {self._sentence_case(first)}."
+            if len(humanized) > 1:
+                second = self._ensure_sentence_starts_lower(humanized[1])
+                response += f" Ademas, {second}."
+            return response
+
+        response = f"En un caso asi, lo mas importante es que {first}."
+
+        if len(humanized) > 1:
+            second = self._ensure_sentence_starts_lower(humanized[1])
+            response += f" Ademas, {second}."
+
+        if len(humanized) > 2:
+            third = self._ensure_sentence_starts_lower(humanized[2])
+            response += f" Como referencia adicional, {third}."
+
+        response += (
+            " Si quieres, te lo bajo a un caso concreto con conclusion y articulo aplicable."
+        )
+        return response
+
+    def _compose_quantity_answer(
+        self,
+        frame: QuestionFrame,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose an answer for amounts, measures, terms or durations."""
+
+        subject = self._resolve_subject_label(frame)
+        humanized = [self._humanize_sentence(item[1]) for item in evidence]
+        joined = " ".join(humanized)
+        currency_fact = self._extract_currency_fact([item[1] for item in evidence])
+        measure_fact = self._extract_measure_fact([item[1] for item in evidence])
+        period_fact = self._extract_period_fact([item[1] for item in evidence])
+        subject_opening = self._sentence_case(subject)
+        subject_lower = subject.lower()
+
+        if "modulo" in subject_lower and measure_fact:
+            if "entre modulos" in normalize_for_search(joined) or "uno del otro" in normalize_for_search(joined):
+                return (
+                    f"No veo una medida unica del tamano del modulo. Lo mas claro que encuentro "
+                    f"es {measure_fact}, pero ese dato parece referirse a la distancia o separacion "
+                    "entre modulos, no al tamano exacto del modulo."
+                )
+            return f"{subject_opening} tiene como medida mas clara recuperada {measure_fact}."
+
+        if "sisa" in subject_lower and currency_fact:
+            period_suffix = f" {period_fact}" if period_fact else ""
+            if frame.wants_confirmation:
+                return f"Si. En lo que aparece cargado, el SISA figura como un pago de {currency_fact}{period_suffix}."
+            return (
+                f"Claro. El SISA aparece como un pago municipal y el monto mas claro que encuentro "
+                f"es {currency_fact}{period_suffix}."
+            )
+
+        if currency_fact and "modulo" not in subject_lower:
+            if frame.wants_confirmation:
+                return f"Si. Lo mas claro que encuentro sobre {subject} es {currency_fact}."
+            return f"Lo mas claro que encuentro sobre {subject} es {currency_fact}."
+
+        if measure_fact:
+            return f"Lo mas claro que encuentro sobre {subject} es {measure_fact}."
+
+        if "modulo" in subject_lower:
+            joined_normalized = normalize_for_search(joined)
+            if any(
+                marker in joined_normalized
+                for marker in ("parametros tecnicos", "especificaciones tecnicas", "medidas establecidas")
+            ):
+                return (
+                    "No veo una medida exacta del modulo en los articulos recuperados. "
+                    "Lo que si aparece es que el modulo debe ajustarse a parametros tecnicos "
+                    "o especificaciones aprobadas por la municipalidad."
+                )
+            return (
+                "No veo una medida exacta del modulo en los articulos recuperados. "
+                f"Lo mas cercano que encuentro es que {self._ensure_sentence_starts_lower(humanized[0])}."
+            )
+
+        return (
+            f"No veo un valor o medida exacta sobre {subject}. "
+            f"Lo mas cercano que encuentro es que {self._ensure_sentence_starts_lower(humanized[0])}."
+        )
+
+    def _compose_procedure_answer(
+        self,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose an answer for procedure or requirement questions."""
+
+        humanized = [self._humanize_sentence(item[1]) for item in evidence]
+        first = self._ensure_sentence_starts_lower(humanized[0])
+        if len(evidence) == 1:
+            return f"En pocas palabras, {first}."
+        second = self._ensure_sentence_starts_lower(humanized[1])
+        return f"En pocas palabras, {first}. Ademas, {second}."
+
+    def _compose_location_answer(
+        self,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose an answer for zones, locations or restrictions."""
+
+        first = self._ensure_sentence_starts_lower(self._humanize_sentence(evidence[0][1]))
+        return f"En pocas palabras, {first}."
+
+    def _compose_general_answer(
+        self,
+        evidence: list[tuple[float, str, RetrievedChunk]],
+    ) -> str:
+        """Compose a general explanatory answer."""
+
+        humanized = [self._humanize_sentence(item[1]) for item in evidence]
+        first = self._ensure_sentence_starts_lower(humanized[0])
+        if len(evidence) == 1:
+            return f"En pocas palabras, {first}."
+        second = self._ensure_sentence_starts_lower(humanized[1])
+        return f"En pocas palabras, {first}. Ademas, {second}."
+
+    def _extract_focus_terms(self, normalized_question: str) -> list[str]:
+        """Extract the main semantic tokens from the user's question."""
+
+        tokens = re.findall(r"[a-záéíóúñ0-9]+", normalized_question)
+        return [
+            token
+            for token in tokens
+            if len(token) > 2 and token not in SPANISH_STOPWORDS
+        ]
+
+    def _looks_like_case(self, normalized_question: str) -> bool:
+        """Detect when the user is presenting a practical scenario."""
+
+        return any(
+            pattern in normalized_question
+            for pattern in (
+                "que pasa si",
+                "si un",
+                "si una",
+                "si el",
+                "si la",
+                "en un caso",
+                "en este caso",
+                "tengo un caso",
+                "te planteo",
+                "supongamos",
+                "por ejemplo",
+                "una persona",
+                "un comerciante",
+                "un vendedor",
+                "puedo ",
+                "podria ",
+                "se puede",
+                "esta permitido",
+                "sin autorizacion",
+                "seria valido",
+                "seria legal",
+                "corresponde",
+            )
+        )
+
+    def _looks_like_confirmation(self, normalized_question: str) -> bool:
+        """Detect short follow-ups that are asking for confirmation."""
+
+        stripped = normalized_question.strip()
+        return any(
+            marker in stripped
+            for marker in (
+                "entonces",
+                "osea",
+                "o sea",
+                "si es",
+                "osea que",
+                "eso quiere decir",
+            )
+        ) or stripped.startswith(("1 ", "un sol", "s/", "s/."))
+
+    def _split_candidates(self, text: str) -> list[str]:
+        """Split a legal fragment into candidate evidence units."""
+
+        raw_parts = re.split(r"(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ])|(?<=;)\s+|\n+", text)
+        candidates: list[str] = []
+        for part in raw_parts:
+            compact = " ".join(part.split()).strip(" -")
+            if not compact:
+                continue
+            candidates.append(compact)
+        return candidates
+
+    def _extract_currency_fact(self, sentences: list[str]) -> str | None:
+        """Extract the clearest monetary amount from evidence."""
+
+        for sentence in sentences:
+            currency_match = CURRENCY_PATTERN.search(sentence)
+            if currency_match:
+                return self._normalize_currency(currency_match.group(0))
+        return None
+
+    def _extract_measure_fact(self, sentences: list[str]) -> str | None:
+        """Extract the clearest non-monetary measure or duration from evidence."""
+
+        for sentence in sentences:
+            measure_match = MEASURE_PATTERN.search(sentence)
+            if measure_match:
+                value = measure_match.group(1).replace(",", ".")
+                unit = measure_match.group(2)
+                return f"{value} {unit}"
+        return None
+
+    def _extract_period_fact(self, sentences: list[str]) -> str:
+        """Extract a simple period qualifier such as daily or annual."""
+
+        joined = normalize_for_search(" ".join(sentences))
+        if "diario" in joined:
+            return "al dia"
+        if "mensual" in joined or "mes" in joined:
+            return "al mes"
+        if "anual" in joined or "ano" in joined:
+            return "al ano"
+        return ""
+
+    def _normalize_currency(self, raw_amount: str) -> str:
+        """Normalize currencies to a readable local format."""
+
+        normalized = raw_amount.upper().replace(" ", "")
+        normalized = normalized.replace("S/.", "S/")
+        match = re.search(r"S/(\d+(?:\.\d+)?)", normalized)
+        if not match:
+            return "S/ 1.00"
+        value = float(match.group(1))
+        return f"S/ {value:.2f}"
+
+    def _resolve_subject_label(self, frame: QuestionFrame) -> str:
+        """Return a cleaner human-readable label for the main topic."""
+
+        normalized = frame.normalized_question
+        if "sisa" in normalized:
+            return "el SISA"
+        if "zona rigida" in normalized:
+            return "la zona rigida"
+        if "autoriz" in normalized:
+            return "la autorizacion municipal"
+        if "modulo" in normalized:
+            return "el modulo"
+        if "feria" in normalized:
+            return "la feria"
+        if frame.subject:
+            return frame.subject
+        return "el tema consultado"
+
+    def _humanize_sentence(self, sentence: str) -> str:
+        """Rewrite the strongest legal sentence into plainer citizen language."""
+
+        compact = self._trim_text(self._strip_legal_headers(sentence), limit=260)
+        normalized = normalize_for_search(compact)
+        currency_fact = self._extract_currency_fact([compact])
+
+        if "pago por concepto de sisa" in normalized:
+            amount = currency_fact or "S/ 1.00"
+            if "diario" in normalized:
+                return f"el comerciante debe pagar SISA y el monto que aparece es {amount} al dia"
+            return f"el comerciante debe pagar SISA y el monto que aparece es {amount}"
+
+        if "se requiere" in normalized and "autoriz" in normalized and "via publica" in normalized:
+            return "para vender en la via publica se necesita autorizacion municipal previa"
+
+        if "autorizacion municipal es personal e intransferible" in normalized:
+            return "la autorizacion es personal y no se puede transferir ni prestar a otra persona"
+
+        if "vigencia anual" in normalized and "renov" in normalized:
+            return "la autorizacion dura un ano y puede renovarse si la municipalidad la evalua favorablemente"
+
+        if "zonas rigidas" in normalized and "no se autoriza" in normalized:
+            return "una zona rigida es un espacio de la via publica donde no esta permitido vender"
+
+        if "mobiliario desmontable" in normalized and "actividad comercial" in normalized:
+            if "especificaciones tecnicas" in normalized:
+                return (
+                    "el modulo es una estructura desmontable para vender y debe respetar "
+                    "las especificaciones tecnicas aprobadas por la municipalidad"
+                )
+            return "el modulo es una estructura desmontable usada para desarrollar la actividad comercial"
+
+        if "no se otorgara o se anulara" in normalized and "autorizacion" in normalized:
+            return "la municipalidad puede negar o dejar sin efecto la autorizacion si se incumplen las condiciones previstas"
+
+        simplified = compact
+        replacements = (
+            (r"\bse encuentra obligado al pago por concepto de\b", "debe pagar"),
+            (r"\bse encuentra obligado a\b", "debe"),
+            (r"\bse requiere de\b", "se necesita"),
+            (r"\bse requiere\b", "se necesita"),
+            (r"\bno se autoriza el ejercicio del comercio en la via publica\b", "no se permite vender en la via publica"),
+            (r"\bsera registrado en el padron correspondiente\b", "debe quedar registrada en el padron correspondiente"),
+            (r"\bdebera presentar\b", "debe presentar"),
+            (r"\badjuntar\b", "presentar"),
+            (r"\bcuyo monto sera de\b", "y el monto es de"),
+            (r"\bcuyo monto es de\b", "y el monto es de"),
+            (r"\bun nuevo sol\b", "S/ 1.00"),
+        )
+        for pattern, replacement in replacements:
+            simplified = re.sub(pattern, replacement, simplified, flags=re.IGNORECASE)
+
+        simplified = simplified.replace("(S/. 1.00)", "S/ 1.00")
+        simplified = simplified.replace("(S/.1.00)", "S/ 1.00")
+        simplified = simplified.replace("(S/ 1.00)", "S/ 1.00")
+        simplified = re.sub(r"\s+", " ", simplified).strip(" .")
+        return simplified
+
+    def _sentence_case(self, text: str) -> str:
+        """Uppercase the first letter of a sentence-sized fragment."""
+
+        compact = text.strip()
+        if not compact:
+            return compact
+        return compact[:1].upper() + compact[1:]
+
+    def _strip_legal_headers(self, text: str) -> str:
+        """Remove title/article heading noise before local summarization."""
+
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        cleaned_lines: list[str] = []
+
+        for line in lines:
+            normalized_line = normalize_for_search(line)
+            if normalized_line.startswith("titulo "):
+                continue
+            if normalized_line.startswith("capitulo "):
+                continue
+            if normalized_line.startswith("base legal"):
+                continue
+            if normalized_line.startswith("de la ") and len(normalized_line.split()) <= 8:
+                continue
+            cleaned_lines.append(line)
+
+        cleaned_text = " ".join(cleaned_lines) if cleaned_lines else text
+        cleaned_text = re.sub(
+            r"art[ií]culo\s+[0-9]+[a-z]?\s*[°º]?\s*[.\-:]*\s*",
+            "",
+            cleaned_text,
+            flags=re.IGNORECASE,
+        )
+        cleaned_text = re.sub(
+            r"^(?:\d+(?:\.\d+)?\s+)?[A-Za-zÁÉÍÓÚÑáéíóúñ\s]{3,40}\.-\s*",
+            "",
+            cleaned_text,
+            flags=re.IGNORECASE,
+        )
+        cleaned_text = re.sub(r"\s+", " ", cleaned_text).strip()
+        return cleaned_text
+
+    def _ensure_sentence_starts_lower(self, text: str) -> str:
+        """Normalize leading casing so the answer reads naturally."""
+
+        compact = self._trim_text(text)
+        if compact.endswith("."):
+            compact = compact[:-1]
+        if not compact:
+            return compact
+        return compact[:1].lower() + compact[1:]
+
+    def _trim_text(self, text: str, limit: int = 220) -> str:
+        """Keep snippets compact."""
+
+        compact = " ".join(text.split())
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 3].rstrip() + "..."
+
+    def _should_disable_external_client(self, exc: Exception) -> bool:
+        """Disable the provider after persistent permission or model errors."""
+
+        message = str(exc).lower()
+        return any(
+            marker in message
+            for marker in (
+                "403",
+                "permission",
+                "credits or licenses",
+                "model not found",
+            )
+        )
+
+# === app\services\query_rewriter.py ===
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from app.config import Settings
+from app.models.schemas import ConversationTurn
+from app.utils.text_cleaner import normalize_for_search
+
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
+
+
+FOLLOW_UP_MARKERS = (
+    "y ",
+    "tambien",
+    "también",
+    "eso",
+    "esa",
+    "ese",
+    "esta",
+    "este",
+    "osea",
+    "o sea",
+    "entonces",
+    "en resumen",
+    "eso significa",
+    "eso quiere decir",
+    "nono",
+    "no no",
+)
+
+TOPIC_ANCHORS = (
+    "modulo",
+    "sisa",
+    "zona",
+    "autoriz",
+    "requis",
+    "permiso",
+    "articulo",
+    "feria",
+    "comercio",
+    "ambulat",
+    "tributo",
+    "vender",
+    "venta",
+    "calle",
+)
+
+MEMORY_MARKERS = (
+    "que te pregunte",
+    "que te dije",
+    "que respondiste",
+    "primero",
+    "anterior",
+)
+
+
+class QueryRewriter:
+    """Rewrite follow-up questions so retrieval gets a clearer search query."""
+
+    def __init__(self, settings: Settings, llm_service: "LLMService", logger) -> None:
+        self.settings = settings
+        self.llm_service = llm_service
+        self.logger = logger.getChild("query_rewriter")
+
+    def rewrite(self, question: str, history: list[ConversationTurn]) -> str:
+        """Return a clearer search question using history when necessary."""
+
+        heuristic = self._heuristic_rewrite(question, history)
+        if self.llm_service.client is None:
+            return heuristic
+
+        try:
+            rewritten = self.llm_service.rewrite_query(question, history)
+        except Exception as exc:  # pragma: no cover
+            self.logger.warning("Fallo la reescritura con el proveedor externo: %s", exc)
+            return heuristic
+
+        rewritten = rewritten.strip()
+        if not rewritten:
+            return heuristic
+
+        normalized_original = normalize_for_search(question)
+        normalized_rewritten = normalize_for_search(rewritten)
+        if normalized_rewritten == normalized_original:
+            return heuristic
+
+        return rewritten
+
+    def _heuristic_rewrite(self, question: str, history: list[ConversationTurn]) -> str:
+        """Use light conversational heuristics when no query-rewriter model is available."""
+
+        if not history:
+            return question
+
+        normalized_question = normalize_for_search(question)
+        tokens = normalized_question.split()
+        asks_about_memory = any(marker in normalized_question for marker in MEMORY_MARKERS)
+        if asks_about_memory:
+            return question
+
+        explicit_follow_up = any(normalized_question.startswith(marker) for marker in FOLLOW_UP_MARKERS)
+        has_topic_anchor = any(anchor in normalized_question for anchor in TOPIC_ANCHORS)
+        short_question = len(tokens) <= 5
+
+        if not explicit_follow_up and not short_question:
+            return question
+        if has_topic_anchor and not explicit_follow_up:
+            return question
+
+        recent_user_turn = next(
+            (
+                turn.text
+                for turn in reversed(history)
+                if turn.role == "user"
+                and normalize_for_search(turn.text) != normalized_question
+            ),
+            "",
+        )
+        if not recent_user_turn:
+            return question
+
+        return f"{recent_user_turn}. Seguimiento: {question}"
+
+# === app\services\query_router.py ===
+from __future__ import annotations
+
+import re
+
+from app.models.domain import QueryIntent
+from app.models.schemas import RoutedQuery
+from app.utils.text_cleaner import normalize_for_search
+
+
+DOMAIN_HINTS = (
+    "comercio ambulatorio",
+    "ambulante",
+    "vender",
+    "venta",
+    "via publica",
+    "espacio publico",
+    "calle",
+    "carretilla",
+    "modulo",
+    "sisa",
+    "autorizacion",
+    "permiso",
+    "feria",
+    "zona rigida",
+    "vendedor",
+    "puesto",
+    "ordenanza",
+    "articulo",
+    "municipalidad",
+)
+
+INTENT_HINTS: dict[QueryIntent, tuple[str, ...]] = {
+    QueryIntent.REQUISITOS: ("requisito", "requisitos", "solicitar", "tramite", "documentos", "que necesito"),
+    QueryIntent.MODULOS: ("modulo", "medida", "dimensiones", "tamano", "puesto"),
+    QueryIntent.PAGOS_SISA: ("sisa", "pago", "cuota", "monto", "tasa", "cuanto cuesta"),
+    QueryIntent.ZONAS_RIGIDAS: ("zona rigida", "zonas rigidas", "zona prohibida", "restriccion de zona"),
+    QueryIntent.AUTORIZACIONES: ("autorizacion", "permiso", "vigencia", "renovacion", "puedo vender"),
+    QueryIntent.FERIAS: ("feria", "ferias", "eventual", "temporal"),
+    QueryIntent.PROHIBICIONES: ("prohibido", "prohibiciones", "impedido", "restriccion", "sancion"),
+}
+
+LEGAL_PATTERNS = (
+    "que dice",
+    "que indica",
+    "que senala",
+    "articulo",
+    "ordenanza",
+    "norma",
+)
+
+
+class QueryRouter:
+    """Soft router used as a hint provider, not as a hard gatekeeper."""
+
+    def route(self, question: str) -> RoutedQuery:
+        normalized = normalize_for_search(question)
+        matched_keywords: list[str] = []
+        intent_scores = {intent: 0.0 for intent in INTENT_HINTS}
+        domain_score = 0.0
+
+        for hint in DOMAIN_HINTS:
+            if _contains_keyword(normalized, hint):
+                matched_keywords.append(hint)
+                domain_score += 1.0
+
+        if any(_contains_keyword(normalized, pattern) for pattern in LEGAL_PATTERNS):
+            domain_score += 1.0
+
+        if any(
+            pattern in normalized
+            for pattern in (
+                "que necesito para vender",
+                "puedo vender",
+                "vender en la calle",
+                "salir a vender",
+                "comerciante informal",
+            )
+        ):
+            domain_score += 1.5
+
+        for intent, hints in INTENT_HINTS.items():
+            for hint in hints:
+                if _contains_keyword(normalized, hint):
+                    intent_scores[intent] += 1.0
+                    matched_keywords.append(hint)
+
+        best_intent = QueryIntent.GENERAL
+        best_score = 0.0
+        for intent, score in intent_scores.items():
+            if score > best_score:
+                best_intent = intent
+                best_score = score
+
+        in_domain = domain_score > 0 or best_score > 0
+        if not in_domain:
+            best_intent = QueryIntent.OUT_OF_SCOPE
+
+        return RoutedQuery(
+            original_query=question,
+            normalized_query=normalized,
+            intent=best_intent,
+            in_domain=in_domain,
+            matched_keywords=list(dict.fromkeys(matched_keywords)),
+        )
+
+
+def _contains_keyword(text: str, keyword: str) -> bool:
+    """Match full words or phrases to avoid accidental substring hits."""
+
+    pattern = r"(?<!\w)" + re.escape(keyword) + r"(?!\w)"
+    return re.search(pattern, text) is not None
+
+# === app\services\retrieval_service.py ===
+from __future__ import annotations
+
+import logging
+import re
+from pathlib import Path
+
+import joblib
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+from app.config import Settings
+from app.models.schemas import ConversationTurn, DocumentChunk, RetrievedChunk
+from app.utils.helpers import ensure_directory, read_json
+from app.utils.text_cleaner import normalize_for_search
+
+
+ARTICLE_QUERY_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+[A-Z]?)", re.IGNORECASE)
+
+FOLLOW_UP_HINTS = (
+    "y ",
+    "tambien",
+    "también",
+    "osea",
+    "o sea",
+    "entonces",
+    "eso",
+    "esa",
+    "ese",
+)
+
+TOPIC_HINTS = (
+    "sisa",
+    "modulo",
+    "autoriz",
+    "zona",
+    "feria",
+    "articulo",
+    "vender",
+    "via publica",
+)
+
+
+class RetrievalService:
+    """Local retrieval with TF-IDF plus light conversational expansion."""
+
+    def __init__(self, settings: Settings, logger: logging.Logger) -> None:
+        self.settings = settings
+        self.logger = logger.getChild("retrieval_service")
+        self.word_vectorizer: TfidfVectorizer | None = None
+        self.char_vectorizer: TfidfVectorizer | None = None
+        self.word_matrix = None
+        self.char_matrix = None
+        self.chunks: list[DocumentChunk] = []
+
+    def build_index(self, chunks: list[DocumentChunk]) -> None:
+        """Create and persist the local vector index."""
+
+        ensure_directory(self.settings.vectorstore_dir)
+        texts = [self._build_index_text(chunk) for chunk in chunks]
+        normalized_texts = [normalize_for_search(text) for text in texts]
+
+        self.word_vectorizer = TfidfVectorizer(ngram_range=(1, 2), stop_words=None)
+        self.char_vectorizer = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 5))
+        self.word_matrix = self.word_vectorizer.fit_transform(texts)
+        self.char_matrix = self.char_vectorizer.fit_transform(normalized_texts)
+        self.chunks = chunks
+
+        joblib.dump(
+            {
+                "word": self.word_vectorizer,
+                "char": self.char_vectorizer,
+            },
+            self.settings.vectorizer_file,
+        )
+        joblib.dump(
+            {
+                "word": self.word_matrix,
+                "char": self.char_matrix,
+            },
+            self.settings.matrix_file,
+        )
+        self.logger.info("Vectorstore local actualizado en %s", self.settings.vectorstore_dir)
+
+    def load_index(self) -> None:
+        """Load persisted chunks and vectors from disk if available."""
+
+        if not self.settings.processed_chunks_file.exists():
+            self.logger.warning(
+                "No existe %s. Ejecuta primero scripts/ingest_documents.py",
+                self.settings.processed_chunks_file,
+            )
+            return
+
+        raw_chunks = read_json(self.settings.processed_chunks_file)
+        self.chunks = [DocumentChunk(**item) for item in raw_chunks]
+
+        if self.settings.vectorizer_file.exists() and self.settings.matrix_file.exists():
+            vectorizers = joblib.load(self.settings.vectorizer_file)
+            matrices = joblib.load(self.settings.matrix_file)
+            if not isinstance(vectorizers, dict) or not isinstance(matrices, dict):
+                self.logger.warning("El vectorstore persistido es de una version anterior. Se reconstruira.")
+                self.build_index(self.chunks)
+                return
+
+            self.word_vectorizer = vectorizers.get("word")
+            self.char_vectorizer = vectorizers.get("char")
+            self.word_matrix = matrices.get("word")
+            self.char_matrix = matrices.get("char")
+
+            matrix_rows = getattr(self.word_matrix, "shape", (0, 0))[0]
+            if matrix_rows != len(self.chunks):
+                self.logger.warning(
+                    "El vectorstore persistido no coincide con los chunks procesados (%s vs %s). Se reconstruira.",
+                    matrix_rows,
+                    len(self.chunks),
+                )
+                self.build_index(self.chunks)
+            else:
+                self.logger.info("Vectorstore local cargado correctamente")
+        else:
+            self.logger.warning("No se encontro el vectorstore persistido; se usara indexacion temporal")
+            self.build_index(self.chunks)
+
+    def search(
+        self,
+        query: str,
+        top_k: int = 4,
+        *,
+        history: list[ConversationTurn] | None = None,
+    ) -> list[RetrievedChunk]:
+        """Retrieve the most relevant chunks for a query, optionally enriched with history."""
+
+        if not self.chunks:
+            self.load_index()
+
+        if not self.chunks or self.word_vectorizer is None or self.char_vectorizer is None:
+            return []
+        if self.word_matrix is None or self.char_matrix is None:
+            return []
+
+        effective_query = self._expand_query_with_history(query, history or [])
+        normalized_query = normalize_for_search(effective_query)
+        query_tokens = self._extract_query_tokens(normalized_query)
+        article_match = ARTICLE_QUERY_PATTERN.search(query)
+        article_label = article_match.group(1).upper() if article_match else ""
+
+        word_query_vector = self.word_vectorizer.transform([effective_query])
+        char_query_vector = self.char_vectorizer.transform([normalized_query])
+        word_scores = cosine_similarity(word_query_vector, self.word_matrix).flatten()
+        char_scores = cosine_similarity(char_query_vector, self.char_matrix).flatten()
+        combined_scores = (word_scores * 0.72) + (char_scores * 0.28)
+
+        ranked_indices = combined_scores.argsort()[::-1][: max(top_k * 3, 10)]
+        candidates: list[RetrievedChunk] = []
+        for index in ranked_indices:
+            chunk = self.chunks[index]
+            score = float(combined_scores[index]) + self._metadata_bonus(
+                chunk,
+                query_tokens=query_tokens,
+                article_label=article_label,
+                normalized_query=normalized_query,
+            )
+            if score <= 0:
+                continue
+
+            candidates.append(
+                RetrievedChunk(
+                    chunk_id=chunk.chunk_id,
+                    document_id=chunk.document_id,
+                    source_title=chunk.source_title,
+                    text=chunk.text,
+                    score=score,
+                    section_title=chunk.section_title,
+                    article_label=chunk.article_label,
+                    metadata=chunk.metadata,
+                )
+            )
+
+        results: list[RetrievedChunk] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for item in sorted(candidates, key=lambda candidate: candidate.score, reverse=True):
+            key = (item.document_id, item.article_label or item.chunk_id)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            results.append(item)
+            if len(results) >= top_k:
+                break
+
+        return results
+
+    def reset(self) -> None:
+        """Delete persisted vectorstore artifacts."""
+
+        for target in [self.settings.vectorizer_file, self.settings.matrix_file]:
+            if Path(target).exists():
+                Path(target).unlink()
+                self.logger.info("Archivo eliminado: %s", target)
+
+    def _build_index_text(self, chunk: DocumentChunk) -> str:
+        """Expand the indexed text using legal metadata."""
+
+        parts = [
+            chunk.source_title,
+            chunk.section_title,
+            f"Articulo {chunk.article_label}" if chunk.article_label else "",
+            chunk.text,
+        ]
+        return "\n".join(part for part in parts if part)
+
+    def _expand_query_with_history(
+        self,
+        query: str,
+        history: list[ConversationTurn],
+    ) -> str:
+        """Expand short follow-ups with the previous user message."""
+
+        if not history:
+            return query
+
+        normalized_query = normalize_for_search(query)
+        tokens = normalized_query.split()
+        explicit_follow_up = any(normalized_query.startswith(marker) for marker in FOLLOW_UP_HINTS)
+        has_topic_hint = any(hint in normalized_query for hint in TOPIC_HINTS)
+        if not explicit_follow_up and (len(tokens) > 5 or has_topic_hint):
+            return query
+
+        previous_user_turn = next(
+            (
+                turn.text
+                for turn in reversed(history)
+                if turn.role == "user"
+                and normalize_for_search(turn.text) != normalized_query
+            ),
+            "",
+        )
+        if not previous_user_turn:
+            return query
+
+        return f"{query} {previous_user_turn}"
+
+    def _metadata_bonus(
+        self,
+        chunk: DocumentChunk,
+        *,
+        query_tokens: set[str],
+        article_label: str,
+        normalized_query: str,
+    ) -> float:
+        """Apply a light metadata-aware bonus to stabilize relevant results."""
+
+        normalized_text = normalize_for_search(chunk.text)
+        normalized_section = normalize_for_search(chunk.section_title)
+        bonus = 0.0
+
+        if article_label and chunk.article_label and chunk.article_label.upper() == article_label:
+            bonus += 2.00
+
+        if "que es" in normalized_query or "defin" in normalized_query:
+            if "definiciones" in normalized_section or "se entiende por" in normalized_text:
+                bonus += 0.90
+
+        overlap_in_section = sum(1 for token in query_tokens if token in normalized_section)
+        overlap_in_text = sum(1 for token in query_tokens if token in normalized_text)
+        bonus += min(0.20, overlap_in_section * 0.08)
+        bonus += min(0.25, overlap_in_text * 0.03)
+
+        if chunk.section_title.startswith("PREAMBULO"):
+            bonus -= 0.45
+
+        return bonus
+
+    def _extract_query_tokens(self, normalized_query: str) -> set[str]:
+        """Extract coarse semantic tokens from the query."""
+
+        return {
+            token
+            for token in re.findall(r"[a-záéíóúñ0-9]+", normalized_query)
+            if len(token) > 2
+        }
+
+# === app\tools\__init__.py ===
+"""Assistant tools for knowledge retrieval and enrichment."""
+
+# === app\tools\document_toolkit.py ===
+from __future__ import annotations
+
+import re
+
+from app.config import Settings
+from app.models.domain import QueryIntent
+from app.models.schemas import ConversationTurn, KnowledgeBundle, RetrievedChunk, RoutedQuery
+from app.services.query_rewriter import QueryRewriter
+from app.services.retrieval_service import RetrievalService
+from app.utils.text_cleaner import normalize_for_search
+
+
+ARTICLE_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+[A-Z]?)", re.IGNORECASE)
+COMMON_TYPO_HINTS = {
+    "ke": "que",
+    "qe": "que",
+    "q": "que",
+    "kuanto": "cuanto",
+    "kanto": "cuanto",
+    "komo": "como",
+    "dnd": "donde",
+    "sona": "zona",
+    "sissa": "sisa",
+    "modlo": "modulo",
+}
+
+INTENT_EXPANSIONS = {
+    QueryIntent.REQUISITOS: "requisitos autorizacion tramite declaracion jurada dni",
+    QueryIntent.MODULOS: "modulo medidas dimensiones especificaciones tecnicas",
+    QueryIntent.PAGOS_SISA: "sisa pago tributo monto diario",
+    QueryIntent.ZONAS_RIGIDAS: "zonas rigidas zonas prohibidas via publica",
+    QueryIntent.AUTORIZACIONES: "autorizacion permiso vigencia renovacion",
+    QueryIntent.FERIAS: "ferias feria temporal autorizacion especial",
+    QueryIntent.PROHIBICIONES: "prohibiciones sanciones restricciones",
+}
+
+
+class DocumentToolkit:
+    """Prepare queries, recover document evidence and package it for answer generation."""
+
+    def __init__(
+        self,
+        settings: Settings,
+        retrieval_service: RetrievalService,
+        query_rewriter: QueryRewriter,
+        logger,
+    ) -> None:
+        self.settings = settings
+        self.retrieval_service = retrieval_service
+        self.query_rewriter = query_rewriter
+        self.logger = logger.getChild("document_toolkit")
+
+    def prepare_query(self, question: str) -> tuple[str, list[str]]:
+        """Normalize only the most obvious typos before retrieval."""
+
+        corrected_question = self._correct_spelling(question)
+        notes: list[str] = []
+        if normalize_for_search(corrected_question) != normalize_for_search(question):
+            notes.append(
+                f"Se interpreto la consulta corrigiendo posibles errores de escritura: {corrected_question}"
+            )
+        return corrected_question, notes
+
+    def gather_knowledge(
+        self,
+        question: str,
+        routed_query: RoutedQuery,
+        history: list[ConversationTurn],
+        *,
+        original_question: str | None = None,
+        preparation_notes: list[str] | None = None,
+    ) -> KnowledgeBundle:
+        """Collect document evidence using a rewritten query plus lightweight multi-search."""
+
+        original_question = original_question or question
+        preparation_notes = preparation_notes or []
+        effective_query = self.query_rewriter.rewrite(question, history)
+        search_queries = self._build_search_queries(question, effective_query, routed_query)
+
+        merged: dict[str, RetrievedChunk] = {}
+        for search_query in search_queries:
+            results = self.retrieval_service.search(
+                search_query,
+                top_k=max(self.settings.retrieval_top_k + 1, 5),
+                history=history,
+            )
+            for item in results:
+                previous = merged.get(item.chunk_id)
+                if previous is None or item.score > previous.score:
+                    merged[item.chunk_id] = item
+
+        final_chunks = self._finalize_chunks(question, effective_query, list(merged.values()))
+        confidence = final_chunks[0].score if final_chunks else 0.0
+        sources = list(dict.fromkeys(self._format_source(chunk) for chunk in final_chunks))
+
+        notes = list(preparation_notes)
+        if normalize_for_search(effective_query) != normalize_for_search(question):
+            notes.append("La consulta se reformulo usando el historial reciente.")
+
+        return KnowledgeBundle(
+            original_query=original_question,
+            effective_query=effective_query,
+            chunks=final_chunks,
+            confidence=confidence,
+            sources=sources,
+            notes=notes,
+            search_queries=search_queries,
+            tools_used=["query_rewrite", "document_search"],
+        )
+
+    def _build_search_queries(
+        self,
+        question: str,
+        effective_query: str,
+        routed_query: RoutedQuery,
+    ) -> list[str]:
+        """Create a small set of search queries without overfitting to hand-written rules."""
+
+        queries = [effective_query]
+        normalized_question = normalize_for_search(question)
+
+        article_match = ARTICLE_PATTERN.search(question)
+        if article_match:
+            queries.append(f"Articulo {article_match.group(1)} comercio ambulatorio")
+
+        if any(pattern in normalized_question for pattern in ("que es", "defin", "se entiende", "concepto")):
+            queries.append(f"{effective_query} definiciones")
+
+        expansion = INTENT_EXPANSIONS.get(routed_query.intent)
+        if expansion:
+            queries.append(f"{effective_query} {expansion}")
+
+        return list(dict.fromkeys(query.strip() for query in queries if query.strip()))
+
+    def _finalize_chunks(
+        self,
+        question: str,
+        effective_query: str,
+        chunks: list[RetrievedChunk],
+    ) -> list[RetrievedChunk]:
+        """Stabilize retrieved results with a light final rerank."""
+
+        normalized_question = normalize_for_search(question)
+        article_match = ARTICLE_PATTERN.search(effective_query)
+        article_label = article_match.group(1).upper() if article_match else ""
+        asks_definition = any(
+            pattern in normalized_question
+            for pattern in ("que es", "defin", "se entiende", "concepto")
+        )
+
+        reranked: list[RetrievedChunk] = []
+        for chunk in chunks:
+            bonus = 0.0
+            normalized_text = normalize_for_search(chunk.text)
+            normalized_section = normalize_for_search(chunk.section_title)
+
+            if article_label and chunk.article_label and chunk.article_label.upper() == article_label:
+                bonus += 0.45
+            if asks_definition and (
+                "definiciones" in normalized_section or "se entiende por" in normalized_text
+            ):
+                bonus += 0.20
+
+            reranked.append(
+                RetrievedChunk(
+                    chunk_id=chunk.chunk_id,
+                    document_id=chunk.document_id,
+                    source_title=chunk.source_title,
+                    text=chunk.text,
+                    score=chunk.score + bonus,
+                    section_title=chunk.section_title,
+                    article_label=chunk.article_label,
+                    metadata=chunk.metadata,
+                )
+            )
+
+        reranked.sort(key=lambda item: item.score, reverse=True)
+        return reranked[: self.settings.retrieval_top_k]
+
+    def _format_source(self, chunk: RetrievedChunk) -> str:
+        """Create a concise source string."""
+
+        parts = [chunk.source_title]
+        if chunk.article_label:
+            parts.append(f"Art. {chunk.article_label}")
+        elif chunk.section_title:
+            parts.append(chunk.section_title)
+        return " | ".join(parts)
+
+    def _correct_spelling(self, question: str) -> str:
+        """Correct only a small whitelist of obvious typo forms."""
+
+        normalized_question = normalize_for_search(question)
+        tokens = re.findall(r"[a-záéíóúñ0-9]+", normalized_question)
+        corrected_tokens = [COMMON_TYPO_HINTS.get(token, token) for token in tokens]
+        return " ".join(corrected_tokens)
+
+# === app\utils\__init__.py ===
+"""Helper utilities package."""
+
+# === app\utils\chunking.py ===
+from __future__ import annotations
+
+import re
+
+from app.models.schemas import DocumentChunk
+from app.utils.text_cleaner import clean_text
+
+
+TITLE_PATTERN = re.compile(r"^(T[IÍ]TULO\s+[A-Z0-9IVXLC]+.*)$", re.IGNORECASE)
+ARTICLE_HEADER_PATTERN = re.compile(
+    r"^Art[íi]culo\s+([0-9]+[A-Z]?)\s*[°º]?\s*(?:[.\-:]|-\s)",
+    re.IGNORECASE,
+)
+SUBSECTION_PATTERN = re.compile(r"^[A-ZÁÉÍÓÚÑ0-9 ,;:/().\-]{3,}$")
+
+
+def split_text_into_chunks(
+    text: str,
+    *,
+    document_id: str,
+    source_title: str,
+    chunk_size: int = 700,
+    overlap: int = 120,
+) -> list[DocumentChunk]:
+    """Split legal text into meaningful chunks using titles and article headers."""
+
+    cleaned = clean_text(text)
+    structured_chunks = _extract_structured_legal_chunks(
+        cleaned,
+        document_id=document_id,
+        source_title=source_title,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+    if structured_chunks:
+        return structured_chunks
+
+    return _fallback_paragraph_chunks(
+        cleaned,
+        document_id=document_id,
+        source_title=source_title,
+        chunk_size=chunk_size,
+        overlap=overlap,
+    )
+
+
+def _extract_structured_legal_chunks(
+    text: str,
+    *,
+    document_id: str,
+    source_title: str,
+    chunk_size: int,
+    overlap: int,
+) -> list[DocumentChunk]:
+    """Chunk legal documents, preserving titles and ignoring preamble article references."""
+
+    lines = [line.strip() for line in text.splitlines()]
+    chunks: list[DocumentChunk] = []
+    chunk_number = 1
+    base_title = ""
+    current_title = ""
+    title_buffer: list[str] = []
+    seen_regulation_body = False
+    preamble_buffer: list[str] = []
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line:
+            index += 1
+            continue
+
+        if TITLE_PATTERN.match(line):
+            seen_regulation_body = True
+            base_title = line
+            current_title = line
+            title_buffer = [line]
+            if index + 1 < len(lines):
+                next_line = lines[index + 1]
+                if next_line and not TITLE_PATTERN.match(next_line) and not ARTICLE_HEADER_PATTERN.match(next_line):
+                    title_buffer.append(next_line)
+                    base_title = f"{line} | {next_line}"
+                    current_title = base_title
+                    index += 1
+            index += 1
+            continue
+
+        if not seen_regulation_body:
+            preamble_buffer.append(line)
+            index += 1
+            continue
+
+        article_match = ARTICLE_HEADER_PATTERN.match(line)
+        if article_match:
+            article_lines = [line]
+            article_label = article_match.group(1)
+            index += 1
+            while index < len(lines):
+                next_line = lines[index]
+                if TITLE_PATTERN.match(next_line) or ARTICLE_HEADER_PATTERN.match(next_line):
+                    break
+                if next_line:
+                    article_lines.append(next_line)
+                index += 1
+
+            article_text = "\n".join(article_lines)
+            prefixed_text = article_text if not title_buffer else "\n".join(title_buffer + [article_text])
+            article_chunks = _split_large_legal_block(
+                prefixed_text,
+                document_id=document_id,
+                source_title=source_title,
+                section_title=current_title,
+                article_label=article_label,
+                chunk_number_start=chunk_number,
+                chunk_size=chunk_size,
+                overlap=overlap,
+            )
+            chunks.extend(article_chunks)
+            chunk_number += len(article_chunks)
+            continue
+
+        if _looks_like_subsection_heading(line):
+            current_title = f"{base_title} | {line}" if base_title else line
+            title_buffer = [current_title]
+            index += 1
+            continue
+
+        # Non-empty lines inside the regulation body that are not article headers become contextual chunks.
+        contextual_lines = [line]
+        index += 1
+        while index < len(lines):
+            next_line = lines[index]
+            if not next_line:
+                index += 1
+                if contextual_lines:
+                    break
+                continue
+            if TITLE_PATTERN.match(next_line) or ARTICLE_HEADER_PATTERN.match(next_line):
+                break
+            contextual_lines.append(next_line)
+            index += 1
+
+        contextual_text = "\n".join(contextual_lines)
+        contextual_chunks = _split_large_legal_block(
+            contextual_text if not title_buffer else "\n".join(title_buffer + [contextual_text]),
+            document_id=document_id,
+            source_title=source_title,
+            section_title=current_title or "PREAMBULO",
+            article_label="",
+            chunk_number_start=chunk_number,
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
+        chunks.extend(contextual_chunks)
+        chunk_number += len(contextual_chunks)
+
+    if preamble_buffer:
+        preamble_text = "\n".join(preamble_buffer).strip()
+        preamble_chunks = _split_large_legal_block(
+            preamble_text,
+            document_id=document_id,
+            source_title=source_title,
+            section_title="PREAMBULO",
+            article_label="",
+            chunk_number_start=chunk_number,
+            chunk_size=chunk_size,
+            overlap=overlap,
+        )
+        chunks.extend(preamble_chunks)
+
+    return chunks
+
+
+def _looks_like_subsection_heading(line: str) -> bool:
+    """Identify uppercase legal subsection headings like DEFINICIONES or CRITERIOS."""
+
+    if not line or TITLE_PATTERN.match(line) or ARTICLE_HEADER_PATTERN.match(line):
+        return False
+    if len(line) > 120:
+        return False
+    return SUBSECTION_PATTERN.match(line) is not None
+
+
+def _split_large_legal_block(
+    text: str,
+    *,
+    document_id: str,
+    source_title: str,
+    section_title: str,
+    article_label: str,
+    chunk_number_start: int,
+    chunk_size: int,
+    overlap: int,
+) -> list[DocumentChunk]:
+    """Split a legal block while preserving article identity."""
+
+    paragraphs = [part.strip() for part in text.split("\n") if part.strip()]
+    chunks: list[DocumentChunk] = []
+    buffer = ""
+    chunk_number = chunk_number_start
+
+    for paragraph in paragraphs:
+        candidate = f"{buffer}\n{paragraph}".strip() if buffer else paragraph
+        if len(candidate) <= chunk_size:
+            buffer = candidate
+            continue
+
+        if buffer:
+            chunks.append(
+                _build_chunk(
+                    document_id=document_id,
+                    source_title=source_title,
+                    text=buffer,
+                    section_title=section_title,
+                    article_label=article_label,
+                    chunk_number=chunk_number,
+                )
+            )
+            chunk_number += 1
+            carry = buffer[-overlap:] if overlap > 0 else ""
+            buffer = f"{carry}\n{paragraph}".strip()
+        else:
+            start = 0
+            while start < len(paragraph):
+                end = start + chunk_size
+                slice_text = paragraph[start:end].strip()
+                chunks.append(
+                    _build_chunk(
+                        document_id=document_id,
+                        source_title=source_title,
+                        text=slice_text,
+                        section_title=section_title,
+                        article_label=article_label,
+                        chunk_number=chunk_number,
+                    )
+                )
+                chunk_number += 1
+                start = max(end - overlap, start + 1)
+            buffer = ""
+
+    if buffer:
+        chunks.append(
+            _build_chunk(
+                document_id=document_id,
+                source_title=source_title,
+                text=buffer,
+                section_title=section_title,
+                article_label=article_label,
+                chunk_number=chunk_number,
+            )
+        )
+
+    return chunks
+
+
+def _build_chunk(
+    *,
+    document_id: str,
+    source_title: str,
+    text: str,
+    section_title: str,
+    article_label: str,
+    chunk_number: int,
+) -> DocumentChunk:
+    """Create a chunk with consistent metadata."""
+
+    return DocumentChunk(
+        chunk_id=f"{document_id}-{chunk_number:03d}",
+        document_id=document_id,
+        source_title=source_title,
+        text=text,
+        section_title=section_title,
+        article_label=article_label,
+        metadata={
+            "chunk_number": chunk_number,
+            "section_title": section_title,
+            "article_label": article_label,
+        },
+    )
+
+
+def _fallback_paragraph_chunks(
+    text: str,
+    *,
+    document_id: str,
+    source_title: str,
+    chunk_size: int,
+    overlap: int,
+) -> list[DocumentChunk]:
+    """Fallback splitter for non-legal or poorly structured text."""
+
+    paragraphs = [part.strip() for part in text.split("\n\n") if part.strip()]
+    chunks: list[DocumentChunk] = []
+    buffer = ""
+    chunk_number = 1
+
+    for paragraph in paragraphs:
+        candidate = f"{buffer}\n\n{paragraph}".strip() if buffer else paragraph
+        if len(candidate) <= chunk_size:
+            buffer = candidate
+            continue
+
+        if buffer:
+            chunks.append(
+                _build_chunk(
+                    document_id=document_id,
+                    source_title=source_title,
+                    text=buffer,
+                    section_title="",
+                    article_label="",
+                    chunk_number=chunk_number,
+                )
+            )
+            chunk_number += 1
+            carry = buffer[-overlap:] if overlap > 0 else ""
+            buffer = f"{carry}\n\n{paragraph}".strip()
+        else:
+            start = 0
+            while start < len(paragraph):
+                end = start + chunk_size
+                slice_text = paragraph[start:end].strip()
+                chunks.append(
+                    _build_chunk(
+                        document_id=document_id,
+                        source_title=source_title,
+                        text=slice_text,
+                        section_title="",
+                        article_label="",
+                        chunk_number=chunk_number,
+                    )
+                )
+                chunk_number += 1
+                start = max(end - overlap, start + 1)
+            buffer = ""
+
+    if buffer:
+        chunks.append(
+            _build_chunk(
+                document_id=document_id,
+                source_title=source_title,
+                text=buffer,
+                section_title="",
+                article_label="",
+                chunk_number=chunk_number,
+            )
+        )
+
+    return chunks
+
+# === app\utils\docx_extractor.py ===
+from __future__ import annotations
+
+import html
+import re
+import zipfile
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
+from app.utils.text_cleaner import fix_mojibake
+
+WORD_NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+
+
+def extract_docx_text(path: Path) -> str:
+    """Extract visible text from a DOCX file using only the standard library."""
+
+    with zipfile.ZipFile(path) as archive:
+        xml_bytes = archive.read("word/document.xml")
+
+    root = ET.fromstring(xml_bytes)
+    paragraphs: list[str] = []
+
+    for paragraph in root.findall(".//w:body/w:p", WORD_NAMESPACE):
+        paragraph_parts: list[str] = []
+        for node in paragraph.iter():
+            tag = _strip_namespace(node.tag)
+            if tag == "t" and node.text:
+                paragraph_parts.append(node.text)
+            elif tag == "tab":
+                paragraph_parts.append("\t")
+            elif tag in {"br", "cr"}:
+                paragraph_parts.append("\n")
+
+        paragraph_text = "".join(paragraph_parts).strip()
+        if paragraph_text:
+            paragraphs.append(paragraph_text)
+
+    return _postprocess_extracted_text("\n".join(paragraphs))
+
+
+def _postprocess_extracted_text(text: str) -> str:
+    """Normalize extracted DOCX text for downstream legal chunking."""
+
+    text = html.unescape(text)
+    text = fix_mojibake(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\u00a0", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" ?\n ?", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    # Improve legal document readability before indexing.
+    text = re.sub(r"(?i)\b(T[IÍ]TULO\s+[A-Z0-9IVXLC]+)\b", r"\n\1", text)
+    text = re.sub(r"(?i)\b(Art[íi]culo\s+[0-9]+[A-Z]?[°º]?)", r"\n\1", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _strip_namespace(tag: str) -> str:
+    """Return the local XML tag name."""
+
+    if "}" not in tag:
+        return tag
+    return tag.split("}", 1)[1]
+
+# === app\utils\helpers.py ===
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+from typing import Any
+
+
+def ensure_directory(path: Path) -> None:
+    """Create a directory if it does not exist."""
+
+    path.mkdir(parents=True, exist_ok=True)
+
+
+def write_json(path: Path, payload: Any) -> None:
+    """Persist JSON using UTF-8 and indentation."""
+
+    if isinstance(payload, list):
+        serializable = [asdict(item) if is_dataclass(item) else item for item in payload]
+    else:
+        serializable = payload
+    path.write_text(json.dumps(serializable, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def read_json(path: Path) -> Any:
+    """Read JSON from disk."""
+
+    return json.loads(path.read_text(encoding="utf-8"))
+
+# === app\utils\text_cleaner.py ===
+from __future__ import annotations
+
+import re
+import unicodedata
+
+
+def fix_mojibake(text: str) -> str:
+    """Repair common UTF-8/Windows-1252 mojibake when detected."""
+
+    suspicious_tokens = ("Ã", "Â", "â€œ", "â€", "â€“", "â€”")
+    if not any(token in text for token in suspicious_tokens):
+        return text
+
+    for encoding_name in ("cp1252", "latin-1"):
+        try:
+            repaired = text.encode(encoding_name).decode("utf-8")
+            if repaired.count("Ã") < text.count("Ã"):
+                return repaired
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+    return text
+
+
+def strip_accents(text: str) -> str:
+    """Remove accents for rule-based matching while preserving base characters."""
+
+    normalized = unicodedata.normalize("NFD", text)
+    return "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+
+
+def clean_text(text: str) -> str:
+    """Normalize whitespace and remove noisy empty lines."""
+
+    text = fix_mojibake(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def normalize_for_search(text: str) -> str:
+    """Prepare text for keyword matching."""
+
+    cleaned = clean_text(text).lower()
+    return strip_accents(cleaned)
+
+# === run.py ===
+from __future__ import annotations
+
+from app.bot.telegram_bot import build_telegram_application
+from app.main import container
+
+
+def main() -> None:
+    """Start the Telegram bot in polling mode."""
+
+    token = container.settings.telegram_bot_token
+    if not token:
+        raise RuntimeError(
+            "Falta TELEGRAM_BOT_TOKEN. Crea tu archivo .env a partir de .env.example."
+        )
+
+    app = build_telegram_application(
+        token=token,
+        assistant_service=container.assistant_service,
+        logger=container.retrieval_service.logger.parent,
+    )
+    app.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
+    main()
+
+# === scripts\import_docx_documents.py ===
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.core.logger import setup_logging
+from app.utils.docx_extractor import extract_docx_text
+from app.utils.helpers import ensure_directory
+
+
+DEFAULT_MAPPINGS = {
+    ROOT_DIR / "data" / "raw" / "ordenanza_108_2012.txt": Path(
+        r"C:\Users\PC\Downloads\ORDENANZA Nº 108-2012-MDP_C.docx"
+    ),
+    ROOT_DIR / "data" / "raw" / "ordenanza_227_2019.txt": Path(
+        r"C:\Users\PC\Downloads\ORDENANZA N° 227-2019-MDP_C.docx"
+    ),
+}
+
+
+def main() -> None:
+    """Extract raw text files from the municipal DOCX sources."""
+
+    logger = setup_logging("INFO")
+    target_dir = ROOT_DIR / "data" / "raw"
+    ensure_directory(target_dir)
+
+    for output_path, source_path in DEFAULT_MAPPINGS.items():
+        if not source_path.exists():
+            logger.warning("No se encontró el documento fuente: %s", source_path)
+            continue
+
+        text = extract_docx_text(source_path)
+        output_path.write_text(text, encoding="utf-8-sig")
+        logger.info("Documento extraído: %s -> %s", source_path.name, output_path.name)
+
+
+if __name__ == "__main__":
+    main()
+
+# === scripts\ingest_documents.py ===
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.config import get_settings
+from app.core.logger import setup_logging
+from app.services.document_service import DocumentService
+from app.services.retrieval_service import RetrievalService
+
+
+def main() -> None:
+    """Process raw documents and rebuild the local vectorstore."""
+
+    settings = get_settings()
+    logger = setup_logging(settings.log_level)
+    document_service = DocumentService(settings, logger)
+    retrieval_service = RetrievalService(settings, logger)
+
+    chunks = document_service.build_chunks()
+    if not chunks:
+        logger.warning("No se generaron chunks. Revisa data/raw/")
+        return
+
+    retrieval_service.build_index(chunks)
+    logger.info("Ingesta completada con %s chunks", len(chunks))
+
+
+if __name__ == "__main__":
+    main()
+
+# === scripts\reset_vectorstore.py ===
+from __future__ import annotations
+
+import shutil
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.config import get_settings
+from app.core.logger import setup_logging
+from app.utils.helpers import ensure_directory
+
+
+def main() -> None:
+    """Reset processed data and local vectorstore artifacts."""
+
+    settings = get_settings()
+    logger = setup_logging(settings.log_level)
+
+    if settings.vectorstore_dir.exists():
+        shutil.rmtree(settings.vectorstore_dir)
+        logger.info("Vectorstore eliminado: %s", settings.vectorstore_dir)
+    ensure_directory(settings.vectorstore_dir)
+
+    if settings.processed_chunks_file.exists():
+        settings.processed_chunks_file.unlink()
+        logger.info("Archivo eliminado: %s", settings.processed_chunks_file)
+
+
+if __name__ == "__main__":
+    main()
+
+# === tests\test_assistant_conversation.py ===
+from pathlib import Path
+
+from app.channels.schemas import IncomingChatMessage
+from app.config import Settings
+from app.core.logger import setup_logging
+from app.memory.conversation_store import ConversationMemoryStore
+from app.models.schemas import ConversationTurn, DocumentChunk
+from app.services.assistant_service import AssistantService
+from app.services.llm_service import LLMService
+from app.services.query_router import QueryRouter
+from app.services.query_rewriter import QueryRewriter
+from app.services.retrieval_service import RetrievalService
+from app.tools.document_toolkit import DocumentToolkit
+
+
+def test_assistant_handles_greeting_without_rejecting_scope(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-1",
+            user_id="user-1",
+            text="Hola",
+        )
+    )
+
+    assert payload.in_domain is True
+    assert "comercio ambulatorio" in payload.answer.lower()
+
+
+def test_assistant_greeting_mentions_general_mode_when_enabled(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, allow_general_chat=True)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-general-greeting",
+            user_id="user-general-greeting",
+            text="Hola",
+        )
+    )
+
+    assert "temas generales" in payload.answer.lower()
+
+
+def test_assistant_handles_acknowledgement_without_running_retrieval(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-ack",
+            user_id="user-ack",
+            text="Si, ayudame",
+        )
+    )
+
+    assert "dime una consulta concreta" in payload.answer.lower()
+    assert payload.sources == []
+
+
+def test_assistant_can_answer_out_of_domain_when_general_mode_is_enabled(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, allow_general_chat=True)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-general-mode",
+            user_id="user-general-mode",
+            text="Cuentame un chiste",
+        )
+    )
+
+    assert "folio" in payload.answer.lower() or "expediente" in payload.answer.lower()
+    assert payload.in_domain is False
+
+
+def test_toolkit_uses_history_for_follow_up_queries(tmp_path: Path) -> None:
+    _assistant, _memory, toolkit, router = build_assistant(tmp_path, include_router=True)
+    history = [
+        ConversationTurn(
+            role="user",
+            text="Explicame la autorizacion municipal para comercio ambulatorio",
+        )
+    ]
+
+    bundle = toolkit.gather_knowledge("y cuanto dura?", router.route("y cuanto dura?"), history)
+
+    assert bundle.effective_query != "y cuanto dura?"
+    assert "Seguimiento" in bundle.effective_query
+    assert bundle.chunks
+
+
+def test_toolkit_uses_history_for_clarifying_follow_up(tmp_path: Path) -> None:
+    _assistant, _memory, toolkit, router = build_assistant(tmp_path, include_router=True)
+    history = [
+        ConversationTurn(
+            role="user",
+            text="Que es el pago SISA",
+        )
+    ]
+
+    bundle = toolkit.gather_knowledge(
+        "osea que pago 1.00 diario?",
+        router.route("osea que pago 1.00 diario?"),
+        history,
+    )
+
+    assert bundle.effective_query != "osea que pago 1.00 diario?"
+    assert "Seguimiento" in bundle.effective_query
+
+
+def test_toolkit_does_not_force_history_into_new_topic(tmp_path: Path) -> None:
+    _assistant, _memory, toolkit, router = build_assistant(tmp_path, include_router=True)
+    history = [
+        ConversationTurn(
+            role="user",
+            text="Que es una zona rigida",
+        )
+    ]
+
+    bundle = toolkit.gather_knowledge(
+        "Cuanto mide un modulo",
+        router.route("Cuanto mide un modulo"),
+        history,
+    )
+
+    assert bundle.effective_query == "Cuanto mide un modulo"
+
+
+def test_toolkit_prepares_query_with_probable_typo_correction(tmp_path: Path) -> None:
+    _assistant, _memory, toolkit, _router = build_assistant(tmp_path, include_router=True)
+
+    corrected, notes = toolkit.prepare_query("ke es una sona rigida")
+
+    assert corrected == "que es una zona rigida"
+    assert notes
+
+
+def test_toolkit_does_not_damage_normal_queries(tmp_path: Path) -> None:
+    _assistant, _memory, toolkit, _router = build_assistant(tmp_path, include_router=True)
+
+    corrected, notes = toolkit.prepare_query("puedo salir a vender en la calle sin autorizacion")
+
+    assert corrected == "puedo salir a vender en la calle sin autorizacion"
+    assert notes == []
+
+
+def test_assistant_reset_clears_session_memory(tmp_path: Path) -> None:
+    assistant, memory = build_assistant(tmp_path)
+    first_message = IncomingChatMessage(
+        channel="telegram",
+        session_id="chat-2",
+        user_id="user-2",
+        text="Explicame la autorizacion municipal",
+    )
+    second_message = IncomingChatMessage(
+        channel="telegram",
+        session_id="chat-2",
+        user_id="user-2",
+        text="y cuanto dura?",
+    )
+
+    assistant.answer_chat_message(first_message)
+    assistant.answer_chat_message(second_message)
+    assert len(memory.load_history("telegram", "chat-2")) == 4
+
+    assistant.reset_conversation("telegram", "chat-2")
+    assert memory.load_history("telegram", "chat-2") == []
+
+
+def test_assistant_can_answer_from_memory_about_first_question(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+    assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-memory",
+            user_id="user-memory",
+            text="Que es el pago sisa",
+        )
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-memory",
+            user_id="user-memory",
+            text="que te pregunte primero",
+        )
+    )
+
+    assert "la primera consulta clara" in payload.answer.lower()
+    assert "que es el pago sisa" in payload.answer.lower()
+
+
+def test_fallback_explains_sisa_instead_of_echoing_random_text(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-3",
+            user_id="user-3",
+            text="Que es el pago sisa",
+        )
+    )
+
+    assert "S/ 1.00" in payload.answer
+    assert "tributo" in payload.answer.lower() or "pago" in payload.answer.lower()
+
+
+def test_fallback_sounds_more_conversational_for_sisa_summary(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-sisa-style",
+            user_id="user-sisa-style",
+            text="Hablame del sisa",
+        )
+    )
+
+    assert "segun la evidencia recuperada" not in payload.answer.lower()
+    assert "claro." in payload.answer.lower()
+    assert "S/ 1.00" in payload.answer
+
+
+def test_follow_up_confirmation_about_sisa_answers_directly(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+    assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-sisa-follow-up",
+            user_id="user-sisa-follow-up",
+            text="Hablame del sisa",
+        )
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-sisa-follow-up",
+            user_id="user-sisa-follow-up",
+            text="entonces si es un sol",
+        )
+    )
+
+    assert payload.answer.lower().startswith("si.")
+    assert "S/ 1.00" in payload.answer
+
+
+def test_fallback_answers_module_question_with_honest_limit(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-4",
+            user_id="user-4",
+            text="Cuanto mide un modulo",
+        )
+    )
+
+    assert "no veo una medida exacta" in payload.answer.lower()
+    assert "parametros tecnicos" in payload.answer.lower()
+
+
+def test_fallback_article_answer_strips_title_noise(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-5",
+            user_id="user-5",
+            text="Que dice el articulo 7",
+        )
+    )
+
+    assert "titulo iii" not in payload.answer.lower()
+    assert "articulo 7" in payload.answer.lower()
+
+
+def test_fallback_case_answer_orients_the_user_from_a_scenario(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-6",
+            user_id="user-6",
+            text="Que pasa si un comerciante vende en via publica sin autorizacion municipal",
+        )
+    )
+
+    assert "no." in payload.answer.lower() or "en un caso asi" in payload.answer.lower()
+    assert "autorizacion" in payload.answer.lower()
+
+
+def build_assistant(
+    tmp_path: Path,
+    include_router: bool = False,
+    allow_general_chat: bool = False,
+):
+    settings = Settings(
+        llm_provider="mock",
+        llm_mode="mock",
+        allow_general_chat=allow_general_chat,
+        raw_data_dir=tmp_path / "raw",
+        processed_data_dir=tmp_path / "processed",
+        vectorstore_dir=tmp_path / "vectorstore",
+        conversations_dir=tmp_path / "processed" / "conversations",
+        processed_chunks_file=tmp_path / "processed" / "chunks.json",
+        vectorizer_file=tmp_path / "vectorstore" / "tfidf_vectorizer.joblib",
+        matrix_file=tmp_path / "vectorstore" / "tfidf_matrix.joblib",
+    )
+    logger = setup_logging("INFO")
+    router = QueryRouter()
+    llm = LLMService(settings, logger)
+    retrieval = RetrievalService(settings, logger)
+    retrieval.build_index(
+        [
+            DocumentChunk(
+                chunk_id="doc-001",
+                document_id="ordenanza_108_2012",
+                source_title="Ordenanza 108-2012-MDP/C",
+                text=(
+                    "Articulo 6.- Para ejercer el comercio ambulatorio se requiere "
+                    "autorizacion municipal previa."
+                ),
+                section_title="TITULO III | AUTORIZACION MUNICIPAL",
+                article_label="6",
+                metadata={},
+            ),
+            DocumentChunk(
+                chunk_id="doc-002",
+                document_id="ordenanza_108_2012",
+                source_title="Ordenanza 108-2012-MDP/C",
+                text=(
+                    "TITULO III\nDE LA AUTORIZACION MUNICIPAL\n"
+                    "Articulo 7.- La autorizacion municipal es personal e intransferible "
+                    "y su otorgamiento sera registrado en el padron correspondiente."
+                ),
+                section_title="TITULO III | AUTORIZACION MUNICIPAL",
+                article_label="7",
+                metadata={},
+            ),
+            DocumentChunk(
+                chunk_id="doc-003",
+                document_id="ordenanza_108_2012",
+                source_title="Ordenanza 108-2012-MDP/C",
+                text=(
+                    "Articulo 8.- La autorizacion municipal tiene vigencia anual y "
+                    "puede renovarse segun evaluacion municipal."
+                ),
+                section_title="TITULO III | AUTORIZACION MUNICIPAL",
+                article_label="8",
+                metadata={},
+            ),
+            DocumentChunk(
+                chunk_id="doc-004",
+                document_id="ordenanza_108_2012",
+                source_title="Ordenanza 108-2012-MDP/C",
+                text=(
+                    "Articulo 36.- El comerciante informal se encuentra obligado al pago "
+                    "por concepto de SISA, cuyo monto es de S/. 1.00 diario."
+                ),
+                section_title="TITULO VII | PAGOS",
+                article_label="36",
+                metadata={},
+            ),
+            DocumentChunk(
+                chunk_id="doc-005",
+                document_id="ordenanza_227_2019",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text=(
+                    "Zonas rigidas.- Areas de la via publica del distrito en las que, "
+                    "por razones de ornato, seguridad o de ordenamiento urbano, no se "
+                    "autoriza el ejercicio del comercio en la via publica."
+                ),
+                section_title="ARTICULO 2 | DEFINICIONES",
+                article_label="2",
+                metadata={},
+            ),
+            DocumentChunk(
+                chunk_id="doc-006",
+                document_id="ordenanza_227_2019",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text=(
+                    "Modulo.- Es el mobiliario desmontable y movible destinado "
+                    "exclusivamente para desarrollar la actividad comercial. Debe cumplir "
+                    "las especificaciones tecnicas aprobadas por la autoridad municipal."
+                ),
+                section_title="ARTICULO 2 | DEFINICIONES",
+                article_label="2",
+                metadata={},
+            ),
+        ]
+    )
+    memory = ConversationMemoryStore(settings, logger)
+    query_rewriter = QueryRewriter(settings, llm, logger)
+    toolkit = DocumentToolkit(settings, retrieval, query_rewriter, logger)
+    assistant = AssistantService(
+        settings=settings,
+        router=router,
+        document_toolkit=toolkit,
+        llm_service=llm,
+        memory_store=memory,
+        logger=logger,
+    )
+
+    if include_router:
+        return assistant, memory, toolkit, router
+    return assistant, memory
+
+# === tests\test_chunking.py ===
+from app.utils.chunking import split_text_into_chunks
+
+
+def test_split_text_into_multiple_chunks() -> None:
+    text = ("Parrafo de prueba. " * 60) + "\n\n" + ("Otro parrafo. " * 60)
+    chunks = split_text_into_chunks(
+        text,
+        document_id="demo",
+        source_title="Demo",
+        chunk_size=300,
+        overlap=50,
+    )
+
+    assert len(chunks) >= 2
+    assert chunks[0].chunk_id == "demo-001"
+    assert chunks[0].source_title == "Demo"
+
+
+def test_split_legal_text_preserves_article_metadata() -> None:
+    text = (
+        "TÍTULO III\n"
+        "DE LA AUTORIZACION MUNICIPAL\n"
+        "Artículo 6°.- Para ejercer el comercio informal se requiere autorización municipal.\n"
+        "Artículo 7°.- La autorización municipal es personal e intransferible.\n"
+    )
+    chunks = split_text_into_chunks(
+        text,
+        document_id="ordenanza_demo",
+        source_title="Ordenanza Demo",
+        chunk_size=400,
+        overlap=50,
+    )
+
+    assert len(chunks) >= 2
+    assert chunks[0].section_title.startswith("TÍTULO III")
+    assert chunks[0].article_label == "6"
+    assert chunks[1].article_label == "7"
+
+
+def test_split_legal_text_ignores_preamble_article_references() -> None:
+    text = (
+        "CONSIDERANDO:\n"
+        "Que, el artículo 194° de la Constitución Política del Perú establece principios generales.\n"
+        "TÍTULO I\n"
+        "DEFINICIONES\n"
+        "Artículo 2°.- Se entiende por comercio ambulatorio la actividad autorizada.\n"
+    )
+    chunks = split_text_into_chunks(
+        text,
+        document_id="ordenanza_demo",
+        source_title="Ordenanza Demo",
+        chunk_size=400,
+        overlap=50,
+    )
+
+    assert any(chunk.section_title == "PREAMBULO" and chunk.article_label == "" for chunk in chunks)
+    assert any(chunk.article_label == "2" for chunk in chunks)
+
+# === tests\test_retrieval.py ===
+from app.config import get_settings
+from app.core.logger import setup_logging
+from app.models.schemas import DocumentChunk
+from app.services.retrieval_service import RetrievalService
+
+
+def test_retrieval_returns_relevant_chunk() -> None:
+    settings = get_settings()
+    logger = setup_logging("INFO")
+    service = RetrievalService(settings, logger)
+    chunks = [
+        DocumentChunk(
+            chunk_id="doc-001",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="La autorización municipal exige requisitos y documentación básica.",
+            section_title="TÍTULO III | DE LA AUTORIZACION MUNICIPAL",
+            article_label="6",
+            metadata={},
+        ),
+        DocumentChunk(
+            chunk_id="doc-002",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Las zonas rígidas prohíben el comercio ambulatorio en vías determinadas.",
+            section_title="TÍTULO IV | REGULACION DEL COMERCIO INFORMAL EN LA VIA PUBLICA",
+            article_label="13",
+            metadata={},
+        ),
+    ]
+    service.build_index(chunks)
+    results = service.search("que requisitos necesito para la autorizacion", top_k=2)
+
+    assert results
+    assert results[0].document_id == "ordenanza_108_2012"
+
+
+def test_retrieval_prioritizes_exact_article_match() -> None:
+    settings = get_settings()
+    logger = setup_logging("INFO")
+    service = RetrievalService(settings, logger)
+    chunks = [
+        DocumentChunk(
+            chunk_id="doc-001",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Artículo 6°. Para ejercer el comercio informal se requiere autorización.",
+            section_title="TÍTULO III | DE LA AUTORIZACION MUNICIPAL",
+            article_label="6",
+            metadata={},
+        ),
+        DocumentChunk(
+            chunk_id="doc-002",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Artículo 7°. La autorización municipal es personal e intransferible.",
+            section_title="TÍTULO III | DE LA AUTORIZACION MUNICIPAL",
+            article_label="7",
+            metadata={},
+        ),
+    ]
+    service.build_index(chunks)
+    results = service.search("que dice el articulo 7", top_k=2)
+
+    assert results
+    assert results[0].article_label == "7"
+
+
+def test_retrieval_prefers_definition_over_preamble() -> None:
+    settings = get_settings()
+    logger = setup_logging("INFO")
+    service = RetrievalService(settings, logger)
+    chunks = [
+        DocumentChunk(
+            chunk_id="doc-001",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Es política de la gestión municipal regular el comercio ambulatorio en el distrito.",
+            section_title="PREAMBULO",
+            article_label="",
+            metadata={},
+        ),
+        DocumentChunk(
+            chunk_id="doc-002",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text="Artículo 2°.- Se entiende por comercio en la vía pública la actividad económica autorizada y temporal.",
+            section_title="TÍTULO I | DEFINICIONES",
+            article_label="2",
+            metadata={},
+        ),
+    ]
+    service.build_index(chunks)
+    results = service.search("que es el comercio ambulatorio", top_k=2)
+
+    assert results
+    assert results[0].section_title.startswith("TÍTULO I")
+
+# === tests\test_router.py ===
+from app.models.domain import QueryIntent
+from app.services.query_router import QueryRouter
+
+
+def test_router_detects_payments() -> None:
+    router = QueryRouter()
+    routed = router.route("Cuanto se paga de SISA para comercio ambulatorio")
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.PAGOS_SISA
+
+
+def test_router_rejects_out_of_scope_question() -> None:
+    router = QueryRouter()
+    routed = router.route("Cual es el horario de atencion del impuesto predial")
+    assert routed.in_domain is False
+    assert routed.intent == QueryIntent.OUT_OF_SCOPE
+
+
+def test_router_accepts_generic_article_question() -> None:
+    router = QueryRouter()
+    routed = router.route("Dime que dice el articulo 7")
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.GENERAL
+
+
+def test_router_accepts_natural_municipal_case_without_exact_keywords() -> None:
+    router = QueryRouter()
+    routed = router.route("Puedo poner una carretilla para vender en la calle")
+    assert routed.in_domain is True
