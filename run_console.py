@@ -61,8 +61,13 @@ def main() -> None:
     session_id = args.session_id
 
     print("PACHABOT - consola local")
-    if container.settings.llm_provider.lower().strip() == "ollama":
+    provider = container.settings.llm_provider.lower().strip()
+    if provider == "ollama":
         print(f"Modelo Ollama: {container.settings.ollama_model}")
+        if not container.settings.ollama_enabled:
+            print("Ollama desactivado: configura OLLAMA_ENABLED=true para usar IA local.")
+    elif provider == "openai":
+        print(f"Modelo OpenAI: {container.settings.openai_model}")
     print("Escribe /ayuda para ver comandos o /salir para terminar.")
 
     while True:

@@ -9,14 +9,14 @@
       "¿Cómo puedo solicitar autorización para comercio ambulatorio?",
       "¿Qué requisitos debo presentar para vender en la vía pública?"
     ],
-    "respuesta_orientativa": "Para solicitar la autorización municipal de comercio ambulatorio, primero debes contar con la condición de comerciante regulado. Además, debes presentar una solicitud con carácter de declaración jurada según el formato gratuito de la municipalidad, adjuntar dos fotografías tamaño carné e indicar el número de comprobante de pago por derecho TUPA. El monto exacto del pago debe verificarse en el TUPA vigente.",
+    "respuesta_orientativa": "Si vas a solicitar el permiso por primera vez, debes presentar una solicitud de ingreso al padrón municipal, las declaraciones juradas correspondientes, copia de tu DNI y una foto panorámica del lugar donde quieres vender. Luego, la municipalidad evalúa si el lugar, el giro y las condiciones del espacio pueden autorizarse. El costo exacto debe verificarse con el TUPA vigente.",
     "fuentes": [
-      "Ordenanza N° 227-2019-MDP/C, Artículo 30",
-      "Ordenanza N° 227-2019-MDP/C, Artículo 6"
+      "Ficha interna de requisitos de comercio ambulatorio",
+      "Ordenanza N° 227-2019-MDP/C"
     ],
     "tramite_relacionado": "tramite_comercio_ambulatorio",
-    "tipo_intencion": "requisitos",
-    "requiere_actualizacion": true,
+    "tipo_intencion": "consulta_requisitos_nuevo",
+    "requiere_actualizacion": false,
     "fecha_revision": null
   },
   {
@@ -71,6 +71,24 @@
     ],
     "tramite_relacionado": "tramite_comercio_ambulatorio",
     "tipo_intencion": "renovacion",
+    "requiere_actualizacion": false,
+    "fecha_revision": null
+  },
+  {
+    "faq_id": "faq_004b_requisitos_renovacion",
+    "pregunta": "¿Qué necesito para renovar mi permiso de comercio ambulatorio?",
+    "variantes": [
+      "¿Cómo renuevo mi permiso?",
+      "Ya tengo autorización y quiero renovar",
+      "Mi permiso está por vencer",
+      "Tengo mi voucher, ¿qué más llevo?"
+    ],
+    "respuesta_orientativa": "Si ya tienes autorización y quieres renovarla, debes presentar el formato o solicitud de renovación, las declaraciones juradas correspondientes, copia de tu DNI, dos fotos tamaño carné y copia del último voucher o comprobante de pago.",
+    "fuentes": [
+      "Ficha interna de requisitos de comercio ambulatorio"
+    ],
+    "tramite_relacionado": "tramite_comercio_ambulatorio",
+    "tipo_intencion": "consulta_requisitos_renovacion",
     "requiere_actualizacion": false,
     "fecha_revision": null
   },

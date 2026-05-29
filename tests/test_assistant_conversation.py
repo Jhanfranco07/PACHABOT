@@ -1,11 +1,11 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 from app.channels.schemas import IncomingChatMessage
 from app.config import Settings
 from app.core.logger import setup_logging
 from app.memory.chat_mode_store import ChatModeStore
 from app.memory.conversation_store import ConversationMemoryStore
-from app.models.domain import AssistantMode
+from app.models.domain import AssistantMode, QueryIntent
 from app.models.schemas import ConversationTurn, DocumentChunk
 from app.services.assistant_service import AssistantService
 from app.services.llm_service import LLMService
@@ -109,8 +109,21 @@ def test_assistant_handles_acknowledgement_without_running_retrieval(tmp_path: P
         )
     )
 
-    assert "hazme una consulta concreta" in payload.answer.lower()
+    assert "puedes contarme" in payload.answer.lower()
     assert payload.sources == []
+
+
+def test_saludo_amable_con_emoji_moderado(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-friendly-greeting", "user-friendly-greeting", "hola")
+    )
+
+    answer = payload.answer.lower()
+    assert "pachabot" in answer
+    assert "puedes escribirme con tus propias palabras" in answer
+    assert payload.answer.count("😊") <= 1
 
 
 def test_assistant_can_answer_out_of_domain_when_general_mode_is_enabled(tmp_path: Path) -> None:
@@ -311,7 +324,7 @@ def test_fallback_explains_sisa_instead_of_echoing_random_text(tmp_path: Path) -
         )
     )
 
-    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "claro, te explico" in payload.answer.lower()
     assert "sisa" in payload.answer.lower()
 
 
@@ -327,7 +340,7 @@ def test_fallback_sounds_more_conversational_for_sisa_summary(tmp_path: Path) ->
         )
     )
 
-    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "claro, te explico" in payload.answer.lower()
     assert "segun la evidencia recuperada" not in payload.answer.lower()
     assert "s/ 1.00" in payload.answer.lower() or "s/. 1.00" in payload.answer.lower()
 
@@ -352,7 +365,7 @@ def test_follow_up_confirmation_about_sisa_answers_directly(tmp_path: Path) -> N
         )
     )
 
-    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "claro, te explico" in payload.answer.lower()
     assert "s/ 1.00" in payload.answer.lower() or "s/. 1.00" in payload.answer.lower() or "sisa" in payload.answer.lower()
 
 
@@ -368,7 +381,7 @@ def test_fallback_answers_module_question_with_honest_limit(tmp_path: Path) -> N
         )
     )
 
-    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "claro, te explico" in payload.answer.lower()
     assert "especificaciones tecnicas" in payload.answer.lower() or "parametros tecnicos" in payload.answer.lower()
 
 
@@ -400,8 +413,387 @@ def test_fallback_case_answer_orients_the_user_from_a_scenario(tmp_path: Path) -
         )
     )
 
-    assert "esto es lo que encontre" in payload.answer.lower()
+    assert "claro, te explico" in payload.answer.lower()
     assert "autorizacion" in payload.answer.lower()
+
+
+def test_sacar_permiso_prioritizes_new_requirement_case_over_validity(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[
+            DocumentChunk(
+                chunk_id="req-new",
+                document_id="requisitos_comercio_ambulatorio",
+                source_title="Ficha interna de requisitos de comercio ambulatorio",
+                text=(
+                    "Tramite nuevo / ingreso al padron municipal\n"
+                    "Requisitos:\n"
+                    "- Solicitud con caracter de declaracion jurada de ingreso al padron municipal.\n"
+                    "- Declaraciones juradas correspondientes.\n"
+                    "- Copia de DNI.\n"
+                    "- Foto panoramica del lugar donde se desea realizar el comercio.\n"
+                    "Explicacion ciudadana:\n"
+                    "Para sacar tu permiso por primera vez, presenta solicitud, declaraciones, DNI y foto del lugar."
+                ),
+                tipo_contenido="requisito",
+                vigencia="vigente",
+                prioridad_retrieval=5,
+                fuente="Ficha interna de requisitos de comercio ambulatorio",
+                knowledge_layer="tramites",
+                metadata={"tipo_tramite": "nuevo_ingreso_padron"},
+            ),
+            DocumentChunk(
+                chunk_id="vig-005",
+                document_id="ordenanza_227_2019",
+                source_title="Ordenanza 227-2019-MDP/C",
+                text="Articulo 5.- La autorizacion municipal tiene vigencia de un año.",
+                article_label="5",
+                tipo_contenido="procedimiento",
+                vigencia="vigente",
+                prioridad_retrieval=3,
+            ),
+        ],
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-sacar-permiso",
+            user_id="user-sacar-permiso",
+            text="Como puedo sacar un permiso para comercio ambulatorio",
+        )
+    )
+
+    assert payload.intent == QueryIntent.REQUISITOS_NUEVO
+    assert "permiso de comercio ambulatorio por primera vez" in payload.answer.lower()
+    assert "foto panoramica" in payload.answer.lower()
+    assert "dos fotos" not in payload.answer.lower()
+    assert "voucher" not in payload.answer.lower()
+
+
+def test_requisitos_nuevo_no_mezcla_renovacion_en_lenguaje_ciudadano(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, chunks=_differentiated_requirement_chunks())
+
+    for index, question in enumerate(
+        [
+            "Como saco mi permiso de comercio ambulatorio?",
+            "Que necesito para vender?",
+            "Quiero vender por primera vez",
+            "Soy nuevo, quiero vender",
+            "q necesito pa vender",
+            "quiero vender desayuno",
+        ],
+        start=1,
+    ):
+        payload = assistant.answer_chat_message(
+            IncomingChatMessage(
+                channel="telegram",
+                session_id=f"chat-new-requirements-{index}",
+                user_id=f"user-new-requirements-{index}",
+                text=question,
+            )
+        )
+
+        answer = payload.answer.lower()
+        assert payload.intent == QueryIntent.REQUISITOS_NUEVO
+        assert "claro" in answer
+        assert "corrigiendo" not in answer
+        assert "primera vez" in answer
+        assert "foto panoramica" in answer
+        assert "dos fotos" not in answer
+        assert "voucher" not in answer
+
+
+def test_requisitos_renovacion_no_mezcla_ingreso_al_padron(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, chunks=_differentiated_requirement_chunks())
+
+    for index, question in enumerate(
+        [
+            "Como renuevo mi permiso?",
+            "Ya tengo autorizacion y quiero renovar",
+            "Mi permiso esta por vencer",
+            "tengo mi voucher, que mas llevo",
+        ],
+        start=1,
+    ):
+        payload = assistant.answer_chat_message(
+            IncomingChatMessage(
+                channel="telegram",
+                session_id=f"chat-renewal-requirements-{index}",
+                user_id=f"user-renewal-requirements-{index}",
+                text=question,
+            )
+        )
+
+        answer = payload.answer.lower()
+        assert payload.intent == QueryIntent.REQUISITOS_RENOVACION
+        assert "renovar" in answer
+        assert "dos fotos" in answer
+        assert "voucher" in answer
+        assert "foto panoramica" not in answer
+
+
+def test_requisitos_ambiguos_piden_aclaracion_simple(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, chunks=_differentiated_requirement_chunks())
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-ambiguous-requirements",
+            user_id="user-ambiguous-requirements",
+            text="Requisitos de comercio ambulatorio",
+        )
+    )
+
+    assert payload.intent == QueryIntent.REQUISITOS_AMBIGUO
+    assert "primera vez" in payload.answer.lower()
+    assert "renovarla" in payload.answer.lower()
+    assert payload.used_llm is False
+
+
+def test_requisitos_y_costo_responde_parcial_sin_inventar_monto(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path, chunks=_differentiated_requirement_chunks(include_cost=True))
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-new-cost-and-requirements",
+            user_id="user-new-cost-and-requirements",
+            text="Que necesito y cuanto cuesta?",
+        )
+    )
+
+    answer = payload.answer.lower()
+    assert payload.intent == QueryIntent.REQUISITOS_NUEVO
+    assert "foto panoramica" in answer
+    assert "tupa vigente" in answer
+    assert "s/" not in answer
+
+
+def test_definicion_comercio_ambulatorio_orienta_por_etapas(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks()],
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-definition-commerce",
+            user_id="user-definition-commerce",
+            text="Que es comercio ambulatorio",
+        )
+    )
+
+    answer = payload.answer.lower()
+    assert payload.intent == QueryIntent.DEFINICION
+    assert "venta de productos o servicios" in answer
+    assert "te puedo explicar" in answer or "podemos seguir" in answer
+    assert "sacar el permiso" in answer
+    assert "\n1." not in answer
+    assert "¿podemos seguir" not in answer
+    assert "seleccione" not in answer
+    assert "menu" not in answer
+    assert "foto panoramica" not in answer
+    assert "copia de dni" not in answer
+    assert "voucher" not in answer
+    assert "tupa vigente" not in answer
+
+
+def test_definicion_padron_y_tupa_no_adelantan_requisitos_ni_costos(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks(include_cost=True)],
+    )
+
+    padron = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-definition-padron", "user-definition-padron", "Que es padron municipal")
+    )
+    tupa = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-definition-tupa", "user-definition-tupa", "Que es TUPA")
+    )
+
+    assert padron.intent == QueryIntent.DEFINICION
+    assert "registro" in padron.answer.lower()
+    assert "como se ingresa al padron" in padron.answer.lower()
+    assert "foto panoramica" not in padron.answer.lower()
+    assert tupa.intent == QueryIntent.DEFINICION
+    assert "pagos oficiales" in tupa.answer.lower()
+    assert "s/." not in tupa.answer.lower()
+    assert "monto exacto" in tupa.answer.lower()
+
+
+def test_respuesta_si_despues_de_definicion_presenta_opciones(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks()],
+    )
+    session_id = "chat-definition-yes"
+
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-definition-yes", "Que es comercio ambulatorio")
+    )
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-definition-yes", "si")
+    )
+
+    answer = payload.answer.lower()
+    assert payload.confidence_level == "orientation"
+    assert "puedes decirme con tus propias palabras" in answer
+    assert "sacar el permiso" in answer
+    assert "renovar" in answer
+    assert "foto panoramica" not in answer
+    assert "hazme una consulta concreta" not in answer
+    assert "\n1." not in answer
+    assert "seleccione" not in answer
+
+
+def test_requisitos_despues_de_definicion_usa_atajo_a_permiso_nuevo(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks()],
+    )
+    session_id = "chat-definition-requirements"
+
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-definition-requirements", "Que es comercio ambulatorio")
+    )
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-definition-requirements", "requisitos")
+    )
+
+    assert payload.intent == QueryIntent.REQUISITOS_NUEVO
+    assert "primera vez" in payload.answer.lower()
+    assert "foto panoramica" in payload.answer.lower()
+
+
+def test_numero_despues_de_opciones_funciona_como_atajo_no_menu(tmp_path: Path) -> None:
+    assistant, memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks()],
+    )
+    session_id = "chat-definition-number-shortcut"
+
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-number-shortcut", "Que es comercio ambulatorio")
+    )
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-number-shortcut", "1")
+    )
+
+    assert payload.intent == QueryIntent.REQUISITOS_NUEVO
+    assert "primera vez" in payload.answer.lower()
+    assert "foto panoramica" in payload.answer.lower()
+    context = memory.get_conversation_context("telegram", session_id)
+    assert context["last_intent"] == QueryIntent.REQUISITOS_NUEVO.value
+
+
+def test_aliases_despues_de_opciones_resuelven_renovacion_y_zonas(tmp_path: Path) -> None:
+    chunks = [
+        *_definition_guidance_chunks(),
+        *_differentiated_requirement_chunks(),
+        DocumentChunk(
+            chunk_id="zone",
+            document_id="zonas_restringidas_comercio_ambulatorio",
+            source_title="Zonas restringidas",
+            text="Las zonas rigidas o prohibidas no autorizan comercio ambulatorio.",
+            tipo_contenido="zona",
+            vigencia="vigente",
+            prioridad_retrieval=4,
+            knowledge_layer="zonas",
+            fuente="Ordenanza 227-2019-MDP/C",
+        ),
+    ]
+    assistant, _memory = build_assistant(tmp_path, chunks=chunks)
+
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-renewal-alias", "user-renewal-alias", "Que es comercio ambulatorio")
+    )
+    renewal = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-renewal-alias", "user-renewal-alias", "la de renovar")
+    )
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-zone-alias", "user-zone-alias", "Que es comercio ambulatorio")
+    )
+    zones = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-zone-alias", "user-zone-alias", "zonas")
+    )
+
+    assert renewal.intent == QueryIntent.REQUISITOS_RENOVACION
+    assert "dos fotos" in renewal.answer.lower()
+    assert zones.intent == QueryIntent.ZONAS_RIGIDAS
+    assert "zona" in zones.answer.lower()
+
+
+def test_gracias_cierra_amable_sin_pregunta_repetitiva(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-thanks", "user-thanks", "gracias")
+    )
+
+    answer = payload.answer.lower()
+    assert "de nada" in answer
+    assert "😊" in payload.answer
+    assert "propias palabras" in answer
+    assert "tienes alguna otra pregunta" not in answer
+
+
+def test_no_entiendo_simplifica_con_paciencia(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks()],
+    )
+    session_id = "chat-not-understood"
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-not-understood", "Que es padron municipal")
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-not-understood", "no entiendo")
+    )
+
+    answer = payload.answer.lower()
+    assert "registro" in answer or "mas sencillo" in answer or "más sencillo" in answer
+    assert "corrigiendo" not in answer
+
+
+def test_si_porfa_con_contexto_pendiente_no_reinicia_conversacion(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=[*_definition_guidance_chunks(), *_differentiated_requirement_chunks()],
+    )
+    session_id = "chat-yes-please"
+    assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-yes-please", "Que es comercio ambulatorio")
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", session_id, "user-yes-please", "si porfa")
+    )
+
+    answer = payload.answer.lower()
+    assert "hazme una consulta concreta" not in answer
+    assert "permiso" in answer
+    assert "renovar" in answer
+
+
+def test_memory_keeps_conversational_context_metadata(tmp_path: Path) -> None:
+    assistant, memory = build_assistant(tmp_path)
+
+    assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-context-metadata",
+            user_id="user-context-metadata",
+            text="Que dice el articulo 7",
+        )
+    )
+    context = memory.get_conversation_context("telegram", "chat-context-metadata")
+
+    assert context["last_intent"]
+    assert context["last_sources"]
+    assert context["last_response_origin"] == "fallback"
 
 
 def test_assistant_keeps_in_domain_queries_even_without_clear_chunks(tmp_path: Path) -> None:
@@ -416,8 +808,8 @@ def test_assistant_keeps_in_domain_queries_even_without_clear_chunks(tmp_path: P
         )
     )
 
-    assert "no encontre informacion suficiente" in payload.answer.lower()
-    assert "respaldo documental verificado" in payload.answer.lower()
+    assert "documentos cargados" in payload.answer.lower()
+    assert "área municipal" in payload.answer.lower()
     assert payload.in_domain is True
 
 
@@ -435,7 +827,7 @@ def test_respuesta_cita_ordenanza_y_articulo(tmp_path: Path) -> None:
 
     assert "ordenanza" in payload.answer.lower()
     assert "articulo" in payload.answer.lower()
-    assert "estado: vigente" in payload.answer.lower()
+    assert "estado: vigente" not in payload.answer.lower()
 
 
 def test_bot_no_responde_con_articulo_historico(tmp_path: Path) -> None:
@@ -468,7 +860,7 @@ def test_bot_no_responde_con_articulo_historico(tmp_path: Path) -> None:
             channel="telegram",
             session_id="chat-current-law",
             user_id="user-current-law",
-            text="Que documentos necesito para una autorizacion",
+            text="Que documentos necesito para vender en la calle",
         )
     )
 
@@ -599,8 +991,8 @@ def test_bot_activa_no_info_cuando_no_hay_evidencia(tmp_path: Path) -> None:
         )
     )
 
-    assert "no encontre informacion suficiente" in payload.answer.lower()
-    assert "respaldo documental verificado" in payload.answer.lower()
+    assert "documentos cargados" in payload.answer.lower()
+    assert "área municipal" in payload.answer.lower()
 
 
 def test_bot_no_asigna_sisa_a_costo_de_tramite_no_identificado(tmp_path: Path) -> None:
@@ -615,8 +1007,9 @@ def test_bot_no_asigna_sisa_a_costo_de_tramite_no_identificado(tmp_path: Path) -
         )
     )
 
-    assert "costo exacto actualizado" in payload.answer.lower()
+    assert "costo exacto" in payload.answer.lower()
     assert "tupa vigente" in payload.answer.lower()
+    assert payload.answer.count("⚠️") <= 1
     assert "s/ 1.00" not in payload.answer.lower()
 
 
@@ -634,6 +1027,321 @@ def test_pregunta_seguimiento_se_reformula_correctamente(tmp_path: Path) -> None
 
     assert "Seguimiento" in bundle.effective_query
     assert "alimentos" in bundle.effective_query.lower()
+
+
+def test_pregunta_de_giros_recupera_rubros_permitidos(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="rubros-21",
+            document_id="tramite_comercio_ambulatorio",
+            source_title="Ficha de tramite",
+            text=(
+                "Rubro 3 - Venta de productos preparados al dia\n"
+                "- G004: Bebidas saludables: emoliente, quinua, maca, soya.\n"
+                "- G007: Sandwiches.\n"
+                "Fuente: Ordenanza 227-2019-MDP/C, Articulo 21"
+            ),
+            section_title="RUBROS Y GIROS PERMITIDOS",
+            article_label="21",
+            tipo_contenido="rubro",
+            vigencia="vigente_con_observacion",
+            prioridad_retrieval=3,
+            knowledge_layer="tramites",
+            fuente="Ordenanza 227-2019-MDP/C, Articulo 21",
+            requires_review=True,
+        )
+    ]
+    assistant, _memory = build_assistant(tmp_path, chunks=chunks)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-rubros",
+            user_id="user-rubros",
+            text="Cuales son los giros?",
+        )
+    )
+
+    assert payload.intent == QueryIntent.RUBROS
+    assert "emoliente" in payload.answer.lower() or "sandwich" in payload.answer.lower()
+    assert "te lo busco" not in payload.answer.lower()
+
+
+def test_follow_up_no_cumple_busca_sanciones_sin_fallback_total(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="obligaciones-57",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text=(
+                "Articulo 57. El comerciante ambulante autorizado debe desarrollar "
+                "solo el giro autorizado, exhibir su autorizacion y respetar el espacio asignado."
+            ),
+            article_label="57",
+            tipo_contenido="obligacion",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+        DocumentChunk(
+            chunk_id="revocatoria-50",
+            document_id="ordenanza_108_2012",
+            source_title="Ordenanza 108-2012-MDP/C",
+            text=(
+                "Articulo 50. El incumplimiento de condiciones de la autorizacion "
+                "puede generar revocatoria y retiro del modulo."
+            ),
+            article_label="50",
+            tipo_contenido="sancion",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+    ]
+    assistant, _memory = build_assistant(tmp_path, chunks=chunks)
+    assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-no-cumple",
+            user_id="user-no-cumple",
+            text="Que obligaciones tiene un comerciante ambulante?",
+        )
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-no-cumple",
+            user_id="user-no-cumple",
+            text="y si no cumple?",
+        )
+    )
+
+    assert payload.intent in {QueryIntent.SANCIONES, QueryIntent.OBLIGACIONES}
+    assert "base documental cargada" not in payload.answer.lower()
+    assert "revocatoria" in payload.answer.lower() or "retiro" in payload.answer.lower()
+    assert payload.answer.count("😊") == 0
+
+
+def test_consulta_manchay_no_activa_fallback_si_hay_zona(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="zona-manchay",
+            document_id="zonas_restringidas_comercio_ambulatorio",
+            source_title="Zonas restringidas",
+            text="Av. Manchay, cuadra 7 y 8, es zona rigida para comercio ambulatorio.",
+            article_label="17.4",
+            tipo_contenido="zona",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+            knowledge_layer="zonas",
+        )
+    ]
+    assistant, _memory = build_assistant(tmp_path, chunks=chunks)
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-manchay",
+            user_id="user-manchay",
+            text="Puedo vender en Av. Manchay?",
+        )
+    )
+
+    assert "base documental cargada" not in payload.answer.lower()
+    assert "manchay" in payload.answer.lower()
+
+
+def test_consulta_costo_y_requisitos_responde_evidencia_parcial(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(
+        tmp_path,
+        chunks=_differentiated_requirement_chunks(include_cost=True),
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id="chat-cost-req",
+            user_id="user-cost-req",
+            text="Que necesito y cuanto cuesta?",
+        )
+    )
+
+    assert "solicitud" in payload.answer.lower()
+    assert "tupa" in payload.answer.lower()
+    assert "foto panoramica" in payload.answer.lower()
+    assert "dos fotos" not in payload.answer.lower()
+    assert "base documental cargada" not in payload.answer.lower()
+
+
+def test_consulta_feria_horario_y_banos_recupera_articulos(tmp_path: Path) -> None:
+    chunks = [
+        DocumentChunk(
+            chunk_id="feria-61",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Articulo 61. El horario de la feria debe estar autorizado por la Municipalidad.",
+            article_label="61",
+            tipo_contenido="horario",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+        DocumentChunk(
+            chunk_id="feria-62",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text="Articulo 62. La feria debe contar con servicios higienicos.",
+            article_label="62",
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+        ),
+    ]
+    assistant, _memory = build_assistant(tmp_path, chunks=chunks)
+
+    horario = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-feria", "user-feria", "Que horario tiene una feria?")
+    )
+    banos = assistant.answer_chat_message(
+        IncomingChatMessage("telegram", "chat-feria", "user-feria", "Tiene que haber baños en la feria?")
+    )
+
+    assert "art. 61" in horario.answer.lower() or "articulo 61" in horario.answer.lower()
+    assert "art. 62" in banos.answer.lower() or "articulo 62" in banos.answer.lower()
+
+
+def _definition_guidance_chunks() -> list[DocumentChunk]:
+    return [
+        DocumentChunk(
+            chunk_id="glosario-comercio-ambulatorio",
+            document_id="glosario_comercio_ambulatorio",
+            source_title="Glosario ciudadano de comercio ambulatorio",
+            text=(
+                "Concepto: Comercio ambulatorio\n"
+                "Variantes: comercio en via publica | venta ambulante | vender en la calle\n"
+                "Definicion ciudadana: El comercio ambulatorio es la venta de productos o servicios "
+                "en espacios publicos, como calles o zonas autorizadas, de manera temporal y con "
+                "autorizacion de la municipalidad.\n"
+                "Pregunta orientadora: Quieres que te explique como sacar el permiso, que requisitos "
+                "necesitas o en que zonas se puede vender?"
+            ),
+            tipo_contenido="definicion",
+            vigencia="vigente",
+            prioridad_retrieval=5,
+            fuente="Ordenanza N. 227-2019-MDP/C",
+            knowledge_layer="tramites",
+            metadata={
+                "concepto": "comercio_ambulatorio",
+                "pregunta_orientadora": (
+                    "Quieres que te explique como sacar el permiso, que requisitos necesitas "
+                    "o en que zonas se puede vender?"
+                ),
+            },
+        ),
+        DocumentChunk(
+            chunk_id="glosario-padron",
+            document_id="glosario_comercio_ambulatorio",
+            source_title="Glosario ciudadano de comercio ambulatorio",
+            text=(
+                "Concepto: Padron municipal\n"
+                "Variantes: padron | registro municipal\n"
+                "Definicion ciudadana: El padron municipal es un registro donde la municipalidad "
+                "identifica a las personas evaluadas o registradas para realizar una actividad, "
+                "como el comercio ambulatorio.\n"
+                "Pregunta orientadora: Quieres que te explique como se ingresa al padron o que "
+                "documentos se presentan?"
+            ),
+            tipo_contenido="definicion",
+            vigencia="vigente",
+            prioridad_retrieval=5,
+            fuente="Ordenanza N. 227-2019-MDP/C",
+            knowledge_layer="tramites",
+            metadata={"concepto": "padron_municipal"},
+        ),
+        DocumentChunk(
+            chunk_id="glosario-tupa",
+            document_id="glosario_comercio_ambulatorio",
+            source_title="Glosario ciudadano de comercio ambulatorio",
+            text=(
+                "Concepto: TUPA\n"
+                "Variantes: pago tupa | derecho tupa\n"
+                "Definicion ciudadana: El TUPA es el documento donde la municipalidad publica sus "
+                "tramites y pagos oficiales. Para saber un monto exacto, se debe revisar el TUPA vigente.\n"
+                "Pregunta orientadora: Quieres que te explique que parte del tramite depende del TUPA?"
+            ),
+            tipo_contenido="definicion",
+            vigencia="vigente",
+            prioridad_retrieval=5,
+            fuente="TUPA vigente / Ordenanza N. 227-2019-MDP/C",
+            knowledge_layer="tramites",
+            metadata={"concepto": "tupa"},
+        ),
+    ]
+
+
+def _differentiated_requirement_chunks(*, include_cost: bool = False) -> list[DocumentChunk]:
+    chunks = [
+        DocumentChunk(
+            chunk_id="req-new",
+            document_id="requisitos_comercio_ambulatorio",
+            source_title="Ficha interna de requisitos de comercio ambulatorio",
+            text=(
+                "Tramite nuevo / ingreso al padron municipal\n"
+                "Cuando aplica:\n"
+                "- Cuando la persona solicita permiso por primera vez.\n"
+                "Requisitos:\n"
+                "- Solicitud con caracter de declaracion jurada de ingreso al padron municipal.\n"
+                "- Declaraciones juradas correspondientes.\n"
+                "- Copia de DNI.\n"
+                "- Foto panoramica del lugar donde se desea realizar el comercio.\n"
+                "Explicacion ciudadana:\n"
+                "Para sacar tu permiso por primera vez, presenta solicitud, declaraciones, DNI y foto del lugar."
+            ),
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=5,
+            fuente="Ficha interna de requisitos de comercio ambulatorio",
+            knowledge_layer="tramites",
+            metadata={"tipo_tramite": "nuevo_ingreso_padron"},
+        ),
+        DocumentChunk(
+            chunk_id="req-renewal",
+            document_id="requisitos_comercio_ambulatorio",
+            source_title="Ficha interna de requisitos de comercio ambulatorio",
+            text=(
+                "Renovacion de autorizacion de comercio ambulatorio\n"
+                "Cuando aplica:\n"
+                "- Cuando la persona ya tiene autorizacion vigente o anterior.\n"
+                "Requisitos:\n"
+                "- Formato o solicitud de renovacion.\n"
+                "- Declaraciones juradas correspondientes.\n"
+                "- Copia de DNI.\n"
+                "- Dos fotos tamano carne.\n"
+                "- Copia del ultimo voucher o comprobante de pago.\n"
+                "Explicacion ciudadana:\n"
+                "Si ya tienes autorizacion y quieres renovarla, presenta formato, declaraciones, DNI, fotos y voucher."
+            ),
+            tipo_contenido="requisito",
+            vigencia="vigente",
+            prioridad_retrieval=5,
+            fuente="Ficha interna de requisitos de comercio ambulatorio",
+            knowledge_layer="tramites",
+            metadata={"tipo_tramite": "renovacion"},
+        ),
+    ]
+    if include_cost:
+        chunks.append(
+            DocumentChunk(
+                chunk_id="cost-tupa",
+                document_id="tramite_comercio_ambulatorio",
+                source_title="Ficha de tramite: Comercio ambulatorio",
+                text="El monto exacto debe verificarse en el TUPA vigente.",
+                tipo_contenido="costo",
+                vigencia="vigente",
+                prioridad_retrieval=3,
+                fuente="TUPA vigente",
+                knowledge_layer="tramites",
+            )
+        )
+    return chunks
 
 
 def build_assistant(

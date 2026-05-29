@@ -60,10 +60,52 @@ FOLLOW_UP_MARKERS = (
     "ese",
     "si es",
     "y si",
+    "que pasa si",
+    "explicamelo",
+    "explicame mas simple",
+    "mas simple",
+    "no entiendo",
+    "no entendi",
     "otra cosa",
     "otra pregunta",
     "otra consulta",
+    "en que articulo",
+    "que articulo",
+    "donde dice",
 )
+
+ORIENTATION_CONTINUATION_TEXT = (
+    "Claro 😊 Podemos ver primero cómo sacar el permiso, los requisitos, "
+    "cómo renovar si ya tienes autorización o las zonas donde no se puede vender. "
+    "Puedes decirme con tus propias palabras qué parte te gustaría revisar."
+)
+
+ORIENTATION_PENDING_OPTIONS = {
+    "1": {
+        "label": "Cómo sacar el permiso por primera vez",
+        "intent": QueryIntent.REQUISITOS_NUEVO.value,
+        "query": "Cómo sacar el permiso de comercio ambulatorio por primera vez",
+        "aliases": ["primera", "la primera", "permiso", "sacar permiso", "quiero sacar mi permiso"],
+    },
+    "2": {
+        "label": "Qué requisitos se presentan",
+        "intent": QueryIntent.REQUISITOS_NUEVO.value,
+        "query": "Qué requisitos se presentan para sacar permiso nuevo de comercio ambulatorio por primera vez",
+        "aliases": ["segunda", "la segunda", "requisitos", "documentos", "papeles", "que documentos llevo"],
+    },
+    "3": {
+        "label": "Renovación",
+        "intent": QueryIntent.REQUISITOS_RENOVACION.value,
+        "query": "Cómo renovar autorización de comercio ambulatorio",
+        "aliases": ["tercera", "la tercera", "renovar", "renovacion", "renovación", "la de renovar"],
+    },
+    "4": {
+        "label": "Zonas no permitidas",
+        "intent": QueryIntent.ZONAS_RIGIDAS.value,
+        "query": "Zonas rígidas o prohibidas para comercio ambulatorio",
+        "aliases": ["cuarta", "la cuarta", "zonas", "zona", "zonas no permitidas", "zona rigida"],
+    },
+}
 
 
 class AssistantService:
@@ -106,9 +148,25 @@ class AssistantService:
             self._remember_exchange(message, question, memory_answer)
             return memory_answer
 
+        pending_option_query = self._resolve_pending_orientation_option(normalized_question, history)
+        if pending_option_query:
+            question = pending_option_query
+            normalized_question = normalize_for_search(question)
+
+        orientation_reply = self._answer_orientation_follow_up(normalized_question, history)
+        if orientation_reply is not None:
+            self._remember_exchange(message, question, orientation_reply)
+            return orientation_reply
+
         if self._is_greeting(normalized_question):
             return self._remember_social_reply(message, question, self._build_mode_welcome(active_mode))
         if self._is_thanks(normalized_question) or self._is_acknowledgement(normalized_question):
+            if self._is_thanks(normalized_question):
+                return self._remember_social_reply(
+                    message,
+                    question,
+                    self._build_thanks_reply(active_mode),
+                )
             return self._remember_social_reply(
                 message,
                 question,
@@ -126,8 +184,8 @@ class AssistantService:
             if active_mode == AssistantMode.COMMERCE and not self.settings.allow_general_chat:
                 payload = self._build_payload(
                     answer=(
-                        "Este chat esta en modo Comercio ambulatorio. "
-                        "Hazme una consulta concreta sobre autorizaciones, requisitos, pagos o zonas."
+                        "Este chat está en modo Comercio ambulatorio. Disculpa, no logré entender bien tu consulta. "
+                        "¿Te refieres a permiso nuevo, renovación, requisitos o zonas donde se puede vender?"
                     ),
                     sources=[],
                     confidence=0.0,
@@ -150,6 +208,23 @@ class AssistantService:
                 response_origin="llm_conversation" if used_llm else "fallback",
                 in_domain=False,
                 intent=QueryIntent.GENERAL,
+            )
+            self._remember_exchange(message, question, payload)
+            return payload
+
+        if routed.intent == QueryIntent.REQUISITOS_AMBIGUO:
+            payload = self._build_payload(
+                answer=(
+                    "¿Es la primera vez que vas a solicitar el permiso o ya tienes "
+                    "autorización y quieres renovarla? Los requisitos cambian según el caso."
+                ),
+                sources=[],
+                confidence=1.0,
+                used_llm=False,
+                response_origin="system",
+                in_domain=True,
+                intent=QueryIntent.REQUISITOS_AMBIGUO,
+                confidence_level="clarification",
             )
             self._remember_exchange(message, question, payload)
             return payload
@@ -220,11 +295,13 @@ class AssistantService:
         """Expose a short runtime summary for operational commands."""
 
         llm_mode = "externo" if self.llm_service.client is not None else "fallback local"
-        configured_model = (
-            self.settings.ollama_model
-            if self.settings.llm_provider.lower().strip() == "ollama"
-            else self.settings.chat_model
-        )
+        provider = self.settings.llm_provider.lower().strip()
+        if provider == "ollama":
+            configured_model = self.settings.ollama_model
+        elif provider == "openai":
+            configured_model = self.settings.openai_model
+        else:
+            configured_model = self.settings.chat_model
         chunk_count = len(self.document_toolkit.retrieval_service.chunks)
         _ = (channel, session_id)
         return (
@@ -316,6 +393,7 @@ class AssistantService:
             "user_id": message.user_id,
             "user_display_name": message.user_display_name,
             "channel_metadata": message.metadata,
+            "conversation_mode": self.get_chat_mode(message.channel, message.session_id).value,
         }
         self.memory_store.append_turn(
             message.channel,
@@ -336,8 +414,14 @@ class AssistantService:
                     "sources": payload.sources,
                     "confidence": payload.confidence,
                     "used_llm": payload.used_llm,
+                    "intent": payload.intent.value,
+                    "response_origin": payload.response_origin,
                     "confidence_level": payload.confidence_level,
                     "evidence_warning": payload.evidence_warning,
+                    "evidence_sources": [item.source for item in payload.evidence],
+                    "pending_data": [payload.evidence_warning] if payload.evidence_warning else [],
+                    "orientation_options": self._orientation_options_for_payload(payload),
+                    "pending_options": self._pending_options_for_payload(payload),
                 },
             ),
         )
@@ -454,6 +538,90 @@ class AssistantService:
 
         return None
 
+    def _answer_orientation_follow_up(
+        self,
+        normalized_question: str,
+        history: list[ConversationTurn],
+    ) -> AnswerPayload | None:
+        """Handle short replies to a previous definition-oriented offer."""
+
+        if not self._last_assistant_offered_orientation(history):
+            return None
+
+        normalized = self._normalize_social_message(normalized_question)
+        if normalized in {"si", "sí", "ya", "claro", "ok", "okay", "dale"}:
+            return self._build_payload(
+                answer=ORIENTATION_CONTINUATION_TEXT,
+                sources=[],
+                confidence=1.0,
+                used_llm=False,
+                response_origin="system",
+                in_domain=True,
+                intent=QueryIntent.GENERAL,
+                confidence_level="orientation",
+            )
+
+        return None
+
+    def _resolve_pending_orientation_option(
+        self,
+        normalized_question: str,
+        history: list[ConversationTurn],
+    ) -> str | None:
+        """Convert a short option reply into a natural RAG query."""
+
+        pending_options = self._last_pending_options(history)
+        if not pending_options:
+            return None
+
+        normalized = self._normalize_social_message(normalized_question)
+        for key, option in pending_options.items():
+            if normalized == key:
+                return str(option.get("query", "")).strip() or None
+            aliases = option.get("aliases", [])
+            if any(
+                normalized == normalize_for_search(str(alias))
+                or normalize_for_search(str(alias)) in normalized
+                for alias in aliases
+            ):
+                return str(option.get("query", "")).strip() or None
+        return None
+
+    @staticmethod
+    def _orientation_options_for_payload(payload: AnswerPayload) -> list[str]:
+        if payload.intent == QueryIntent.DEFINICION:
+            return ["permiso", "requisitos", "renovacion", "zonas"]
+        if payload.confidence_level == "orientation":
+            return ["permiso", "requisitos", "renovacion", "zonas"]
+        return []
+
+    @staticmethod
+    def _pending_options_for_payload(payload: AnswerPayload) -> dict[str, dict[str, object]]:
+        if payload.intent == QueryIntent.DEFINICION or payload.confidence_level == "orientation":
+            return ORIENTATION_PENDING_OPTIONS
+        return {}
+
+    @staticmethod
+    def _last_assistant_offered_orientation(history: list[ConversationTurn]) -> bool:
+        last_assistant = next((turn for turn in reversed(history) if turn.role == "assistant"), None)
+        if last_assistant is None:
+            return False
+        options = last_assistant.metadata.get("orientation_options", [])
+        if options:
+            return True
+        normalized = normalize_for_search(last_assistant.text)
+        return "quieres que te explique" in normalized and any(
+            marker in normalized for marker in ("requisitos", "permiso", "zonas", "renov")
+        )
+
+    @staticmethod
+    def _last_pending_options(history: list[ConversationTurn]) -> dict[str, dict[str, object]]:
+        last_assistant = next((turn for turn in reversed(history) if turn.role == "assistant"), None)
+        if last_assistant is None:
+            return {}
+        pending_options = last_assistant.metadata.get("pending_options", {})
+        return pending_options if isinstance(pending_options, dict) else {}
+
     def _should_treat_as_in_domain(
         self,
         routed,
@@ -511,27 +679,36 @@ class AssistantService:
 
         if active_mode == AssistantMode.COMMERCE:
             return (
-                "👋 Hola! Soy PachaBot y este chat está en modo Comercio ambulatorio. "
-                "Puedo ayudarte con ordenanzas, requisitos, autorizaciones, módulos, "
-                "zonas rígidas y pagos SISA."
+                "¡Hola! 😊 Soy PachaBot. Te puedo orientar sobre comercio ambulatorio, "
+                "permisos, requisitos, renovación, zonas rígidas y pagos relacionados. "
+                "Puedes escribirme con tus propias palabras."
             )
 
         return (
-            "👋 Hola! Este chat está en modo General. "
-            "Puedo responder preguntas libres y, si luego quieres, puedes cambiar al modo Comercio."
+            "¡Hola! 😊 Este chat está en modo General. Soy PachaBot y puedo orientarte con palabras sencillas. "
+            "Si luego quieres revisar comercio ambulatorio, también puedo ayudarte."
         )
+
+    def _build_thanks_reply(self, active_mode: AssistantMode) -> str:
+        """Build a warm closing without sounding like a fixed menu."""
+
+        if active_mode == AssistantMode.COMMERCE:
+            return (
+                "De nada 😊 Si tienes otra duda sobre tu permiso, renovacion, zona "
+                "o requisitos, puedes escribirme con tus propias palabras."
+            )
+
+        return "De nada 😊 Cuando quieras, puedes escribirme con tus propias palabras."
 
     def _build_mode_acknowledgement(self, active_mode: AssistantMode) -> str:
         """Build a follow-up hint that reflects the active chat mode."""
 
         if active_mode == AssistantMode.COMMERCE:
             return (
-                "👍 Claro. Hazme una consulta concreta sobre comercio ambulatorio. "
-                "Por ejemplo: 'Qué necesito para vender?', 'Qué dice el artículo 7' "
-                "o 'Cuánto se paga de SISA?'."
+                "Claro 😊 Puedes contarme qué necesitas: sacar un permiso, renovar, "
+                "revisar requisitos o consultar una zona."
             )
 
         return (
-            "👍 Claro. Hazme cualquier pregunta general. "
-            "Si luego quieres revisar ordenanzas municipales, cambia al modo Comercio."
+            "Claro 😊 Puedes escribirme tu consulta con tus propias palabras."
         )

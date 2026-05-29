@@ -12,6 +12,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from app.config import Settings
 from app.models.schemas import ConversationTurn, DocumentChunk, RetrievedChunk
 from app.utils.helpers import ensure_directory, read_json
+from app.utils.query_expansion import expand_query
 from app.utils.text_cleaner import normalize_for_search
 
 
@@ -30,6 +31,9 @@ FOLLOW_UP_HINTS = (
     "otra cosa",
     "otra pregunta",
     "otra consulta",
+    "en que articulo",
+    "que articulo",
+    "donde dice",
 )
 
 TOPIC_HINTS = (
@@ -40,6 +44,8 @@ TOPIC_HINTS = (
     "feria",
     "articulo",
     "vender",
+    "giro",
+    "rubro",
     "via publica",
 )
 
@@ -144,7 +150,8 @@ class RetrievalService:
             return []
 
         effective_query = self._expand_query_with_history(query, history or [])
-        normalized_query = normalize_for_search(effective_query)
+        expanded_query = expand_query(effective_query)
+        normalized_query = normalize_for_search(expanded_query)
         historical_query = any(
             marker in normalized_query
             for marker in ("historico", "version anterior", "antes de la modificacion", "texto anterior")
@@ -153,7 +160,7 @@ class RetrievalService:
         article_match = ARTICLE_QUERY_PATTERN.search(query)
         article_label = article_match.group(1).upper() if article_match else ""
 
-        word_query_vector = self.word_vectorizer.transform([effective_query])
+        word_query_vector = self.word_vectorizer.transform([expanded_query])
         char_query_vector = self.char_vectorizer.transform([normalized_query])
         word_scores = cosine_similarity(word_query_vector, self.word_matrix).flatten()
         char_scores = cosine_similarity(char_query_vector, self.char_matrix).flatten()
@@ -296,11 +303,38 @@ class RetrievalService:
             "chunks": 0.0,
         }.get(chunk.knowledge_layer, 0.0)
 
-        if any(term in normalized_query for term in ("documento", "requisit", "que necesito")):
+        if any(
+            term in normalized_query
+            for term in (
+                "documento",
+                "requisit",
+                "que necesito",
+                "sacar permiso",
+                "sacar mi permiso",
+                "obtener permiso",
+                "obtener autorizacion",
+                "como puedo sacar",
+                "como saco",
+                "como tramito",
+            )
+        ):
             if chunk.tipo_contenido == "requisito":
-                bonus += 0.85
+                bonus += 1.35
+            if chunk.knowledge_layer == "tramites" and chunk.tipo_contenido == "procedimiento":
+                bonus += 0.65
             if chunk.article_label == "30" and chunk.vigencia == "vigente":
                 bonus += 1.10
+            tipo_tramite = str(chunk.metadata.get("tipo_tramite", ""))
+            if _looks_like_new_requirement_query(normalized_query):
+                if tipo_tramite == "nuevo_ingreso_padron":
+                    bonus += 4.00
+                elif tipo_tramite == "renovacion":
+                    bonus -= 3.50
+            if _looks_like_renewal_requirement_query(normalized_query):
+                if tipo_tramite == "renovacion":
+                    bonus += 4.00
+                elif tipo_tramite == "nuevo_ingreso_padron":
+                    bonus -= 3.50
         if any(term in normalized_query for term in ("cuanto cuesta", "costo", "monto", "tasa", "pago")):
             if chunk.tipo_contenido == "costo":
                 bonus += 2.00
@@ -311,6 +345,57 @@ class RetrievalService:
                 bonus += 0.75
             if chunk.article_label == "5" and chunk.vigencia == "vigente":
                 bonus += 0.90
+        if any(term in normalized_query for term in ("giro", "giros", "rubro", "rubros", "que puedo vender")):
+            if chunk.tipo_contenido == "rubro":
+                bonus += 2.50
+            if chunk.knowledge_layer == "tramites" and chunk.tipo_contenido == "rubro":
+                bonus += 1.00
+            if chunk.article_label == "21":
+                bonus += 1.00
+        if any(term in normalized_query for term in ("modulo", "puesto", "stand", "mobiliario")) and not any(
+            term in normalized_query for term in ("quitar", "retiro", "retirar", "sancion", "revoc")
+        ):
+            if chunk.tipo_contenido in {"modulo", "definicion"} and (
+                "modulo" in normalized_text or "mobiliario" in normalized_text
+            ):
+                bonus += 2.20
+            if "especificaciones tecnicas" in normalized_text or "parametros tecnicos" in normalized_text:
+                bonus += 1.20
+            if chunk.tipo_contenido in {"zona", "prohibicion"}:
+                bonus -= 0.90
+        if any(
+            term in normalized_query
+            for term in (
+                "obligacion",
+                "obligaciones",
+                "deberes",
+                "cumplir",
+                "no cumple",
+                "no cumplo",
+                "incumpl",
+                "sancion",
+                "revocacion",
+                "retiro",
+                "quitar",
+                "fiscalizacion",
+            )
+        ):
+            if chunk.tipo_contenido in {"obligacion", "sancion", "prohibicion"}:
+                bonus += 1.60
+            if chunk.article_label in {"38", "50", "57", "63", "64"}:
+                bonus += 1.45
+            if any(marker in normalized_text for marker in ("incumpl", "revoc", "retiro", "sancion")):
+                bonus += 0.70
+        if "feria" in normalized_query and ("horario" in normalized_query or "articulo 61" in normalized_query):
+            if chunk.article_label == "61" or chunk.tipo_contenido == "horario":
+                bonus += 2.50
+        if "feria" in normalized_query and any(
+            term in normalized_query for term in ("servicios higienicos", "bano", "baño", "articulo 62")
+        ):
+            if chunk.article_label == "62":
+                bonus += 2.75
+            if "servicios higienicos" in normalized_text or "bano" in normalized_text or "baño" in normalized_text:
+                bonus += 1.25
         if "zona" in normalized_query or ("donde" in normalized_query and "vender" in normalized_query):
             if chunk.tipo_contenido in {"zona", "prohibicion"}:
                 bonus += 0.90
@@ -338,6 +423,11 @@ class RetrievalService:
             bonus += 2.00
 
         if "que es" in normalized_query or "defin" in normalized_query:
+            concept = str(chunk.metadata.get("concepto", ""))
+            if chunk.tipo_contenido == "definicion":
+                bonus += 1.50
+            if concept and _definition_concept_matches(normalized_query, concept):
+                bonus += 3.50
             if "definiciones" in normalized_section or "se entiende por" in normalized_text:
                 bonus += 0.90
 
@@ -372,14 +462,78 @@ class RetrievalService:
         """Load citizen guidance and consolidated law after the processed RAG corpus."""
 
         chunks: list[DocumentChunk] = []
+        glossary_file = self.settings.tramites_data_dir / "glosario_comercio_ambulatorio.json"
+        requirements_file = self.settings.tramites_data_dir / "requisitos_comercio_ambulatorio.json"
         tramite_file = self.settings.tramites_data_dir / "comercio_ambulatorio.json"
+        zonas_file = self.settings.tramites_data_dir / "zonas_restringidas_comercio_ambulatorio.json"
+        unverified_articles_file = self.settings.tramites_data_dir / "ordenanza_227_articulos_57_64.json"
         faq_file = self.settings.faq_data_dir / "comercio_ambulatorio_faq.json"
+        if glossary_file.exists():
+            chunks.extend(self._chunks_from_glossary(read_json(glossary_file)))
+        if requirements_file.exists():
+            chunks.extend(self._chunks_from_requirement_cases(read_json(requirements_file)))
         if tramite_file.exists():
             chunks.extend(self._chunks_from_tramite(read_json(tramite_file)))
+        if zonas_file.exists():
+            chunks.extend(self._chunks_from_zones(read_json(zonas_file)))
+        if unverified_articles_file.exists():
+            chunks.extend(self._chunks_from_unverified_articles(read_json(unverified_articles_file)))
         if faq_file.exists():
             chunks.extend(self._chunks_from_faq(read_json(faq_file)))
         if self.settings.consolidated_norm_file.exists():
             chunks.extend(self._chunks_from_consolidated(read_json(self.settings.consolidated_norm_file)))
+        return chunks
+
+    def _chunks_from_glossary(self, payload: dict[str, Any]) -> list[DocumentChunk]:
+        """Load concise citizen definitions as first-step guidance."""
+
+        title = str(payload.get("nombre", "Glosario ciudadano de comercio ambulatorio"))
+        chunks: list[DocumentChunk] = []
+        for item in payload.get("conceptos", []):
+            concept_id = str(item.get("id", "")).strip()
+            term = str(item.get("termino", "")).strip()
+            definition = str(item.get("definicion_ciudadana", "")).strip()
+            follow_up = str(item.get("pregunta_orientadora", "")).strip()
+            variants = " | ".join(
+                str(value).strip()
+                for value in item.get("variantes", [])
+                if str(value).strip()
+            )
+            if not concept_id or not definition:
+                continue
+            text = "\n".join(
+                part
+                for part in (
+                    f"Concepto: {term}",
+                    f"Variantes: {variants}" if variants else "",
+                    f"Definicion ciudadana: {definition}",
+                    f"Pregunta orientadora: {follow_up}" if follow_up else "",
+                )
+                if part
+            )
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=f"glosario-{concept_id}",
+                    document_id=str(payload.get("id", "glosario_comercio_ambulatorio")),
+                    source_title=title,
+                    text=text,
+                    section_title=term,
+                    normalized_text=normalize_for_search(text),
+                    tipo_contenido="definicion",
+                    user_intents=["consulta_definicion"],
+                    vigencia="vigente",
+                    prioridad_retrieval=5,
+                    fuente=str(item.get("fuente", title)),
+                    tramite_relacionado="tramite_comercio_ambulatorio",
+                    knowledge_layer="tramites",
+                    requires_review=False,
+                    metadata={
+                        "concepto": concept_id,
+                        "termino": term,
+                        "pregunta_orientadora": follow_up,
+                    },
+                )
+            )
         return chunks
 
     def _chunks_from_tramite(self, payload: dict[str, Any]) -> list[DocumentChunk]:
@@ -390,13 +544,36 @@ class RetrievalService:
             f"- {item.get('descripcion', '')} Fuente: {item.get('fuente', '')}"
             for item in requirements
         )
-        records = [
+        rubros = payload.get("rubros_permitidos", [])
+        rubros_text = "\n".join(
+            _format_rubro_permitido(item)
+            for item in rubros
+        )
+        records = []
+        if not (self.settings.tramites_data_dir / "requisitos_comercio_ambulatorio.json").exists():
+            records.append(
+                (
+                    "requisitos",
+                    "REQUISITOS",
+                    f"{payload.get('descripcion', '')}\nRequisitos:\n{requirement_text}",
+                    "requisito",
+                    "Ordenanza 227-2019-MDP/C, Articulo 30",
+                )
+            )
+        records.extend([
             (
-                "requisitos",
-                "REQUISITOS",
-                f"{payload.get('descripcion', '')}\nRequisitos:\n{requirement_text}",
-                "requisito",
-                "Ordenanza 227-2019-MDP/C, Articulo 30",
+                "pasos",
+                "PASOS DEL TRAMITE",
+                "\n".join(
+                    _format_tramite_step(item)
+                    for item in (
+                        payload.get("pasos")
+                        or payload.get("pasos_orientativos")
+                        or []
+                    )
+                ),
+                "procedimiento",
+                "Ficha de tramite municipal basada en Ordenanza 227-2019-MDP/C",
             ),
             (
                 "costo",
@@ -413,13 +590,20 @@ class RetrievalService:
                 str(payload.get("vigencia", {}).get("fuente", "")),
             ),
             (
+                "rubros",
+                "RUBROS Y GIROS PERMITIDOS",
+                rubros_text,
+                "rubro",
+                "Ordenanza 227-2019-MDP/C, Articulo 21",
+            ),
+            (
                 "restricciones",
                 "RESTRICCIONES",
                 "\n".join(str(item) for item in payload.get("restricciones", [])),
                 "zona",
                 "Ordenanza 227-2019-MDP/C, Articulos 2 y 17.4",
             ),
-        ]
+        ])
         return [
             DocumentChunk(
                 chunk_id=f"tramite-{payload.get('id', 'comercio_ambulatorio')}-{key}",
@@ -440,6 +624,156 @@ class RetrievalService:
             for key, section, text, content_type, fuente in records
             if text.strip()
         ]
+
+    def _chunks_from_requirement_cases(self, payload: dict[str, Any]) -> list[DocumentChunk]:
+        """Load maintained citizen-facing requirements split by case."""
+
+        title = "Ficha interna de requisitos de comercio ambulatorio"
+        source_names = [
+            str(item.get("nombre", "")).strip()
+            for item in payload.get("fuentes", [])
+            if str(item.get("nombre", "")).strip()
+        ]
+        general_source = "; ".join(source_names) or title
+        chunks: list[DocumentChunk] = []
+        for item in payload.get("tipos_tramite", []):
+            case_id = str(item.get("id", "")).strip()
+            if not case_id:
+                continue
+            requisitos = "\n".join(
+                f"- {str(value).strip()}"
+                for value in item.get("requisitos", [])
+                if str(value).strip()
+            )
+            cuando_aplica = "\n".join(
+                f"- {str(value).strip()}"
+                for value in item.get("cuando_aplica", [])
+                if str(value).strip()
+            )
+            frases = " | ".join(
+                str(value).strip()
+                for value in item.get("frases_usuario", [])
+                if str(value).strip()
+            )
+            no_confundir = "\n".join(
+                f"- {str(value).strip()}"
+                for value in item.get("no_confundir_con", [])
+                if str(value).strip()
+            )
+            text = "\n".join(
+                part
+                for part in (
+                    str(item.get("nombre", "")).strip(),
+                    "Cuando aplica:",
+                    cuando_aplica,
+                    "Formas comunes de preguntar:",
+                    frases,
+                    "Requisitos:",
+                    requisitos,
+                    "Explicacion ciudadana:",
+                    str(item.get("explicacion_ciudadana", "")).strip(),
+                    "Version simple:",
+                    str(item.get("explicacion_simple", "")).strip(),
+                    "No confundir:",
+                    no_confundir,
+                    "Observaciones generales:",
+                    "\n".join(f"- {value}" for value in payload.get("observaciones_generales", [])),
+                )
+                if part
+            )
+            if not text.strip():
+                continue
+            intent = (
+                "consulta_requisitos_renovacion"
+                if case_id == "renovacion"
+                else "consulta_requisitos_nuevo"
+            )
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=f"requisitos-comercio-ambulatorio-{case_id}",
+                    document_id="requisitos_comercio_ambulatorio",
+                    source_title=title,
+                    text=text,
+                    section_title=str(item.get("nombre", "")).strip(),
+                    normalized_text=normalize_for_search(text),
+                    tipo_contenido="requisito",
+                    user_intents=[intent, "consulta_requisitos"],
+                    vigencia="vigente",
+                    prioridad_retrieval=5,
+                    fuente=general_source,
+                    tramite_relacionado="tramite_comercio_ambulatorio",
+                    knowledge_layer="tramites",
+                    requires_review=False,
+                    metadata={
+                        "tipo_tramite": case_id,
+                        "area_responsable": str(payload.get("area_responsable", "")),
+                        "explicacion_simple": str(item.get("explicacion_simple", "")),
+                    },
+                )
+            )
+        return chunks
+
+    def _chunks_from_zones(self, payload: dict[str, Any]) -> list[DocumentChunk]:
+        title = str(payload.get("nombre", "Zonas restringidas de comercio ambulatorio"))
+        chunks: list[DocumentChunk] = []
+        for item in payload.get("zonas", []):
+            zone_id = str(item.get("id", "zona_restringida"))
+            location = str(item.get("ubicacion", ""))
+            restriction = str(item.get("restriccion", ""))
+            source = str(item.get("fuente", ""))
+            text = "\n".join(part for part in (location, restriction, str(item.get("nota", ""))) if part)
+            if not text.strip():
+                continue
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=f"zonas-{zone_id}",
+                    document_id=str(payload.get("id", "zonas_restringidas_comercio_ambulatorio")),
+                    source_title=title,
+                    text=text,
+                    section_title="ZONAS RESTRINGIDAS",
+                    article_label=str(item.get("articulo", "")),
+                    normalized_text=normalize_for_search(text),
+                    tipo_contenido="zona",
+                    user_intents=["consulta_zona_restringida", "consulta_ubicacion"],
+                    vigencia=str(item.get("vigencia", "vigente_con_observacion")),
+                    prioridad_retrieval=3,
+                    fuente=source,
+                    tramite_relacionado="tramite_comercio_ambulatorio",
+                    knowledge_layer="zonas",
+                    requires_review=bool(item.get("requires_review", True)),
+                    metadata={"ubicacion": location},
+                )
+            )
+        return chunks
+
+    def _chunks_from_unverified_articles(self, payload: dict[str, Any]) -> list[DocumentChunk]:
+        title = str(payload.get("nombre", "Articulos no verificables de Ordenanza 227-2019"))
+        chunks: list[DocumentChunk] = []
+        for item in payload.get("articulos", []):
+            label = str(item.get("articulo", ""))
+            text = str(item.get("observacion", "Texto no disponible en la fuente cargada."))
+            chunks.append(
+                DocumentChunk(
+                    chunk_id=f"ordenanza-227-articulo-{label}-no-verificable",
+                    document_id=str(payload.get("id", "ordenanza_227_articulos_57_64")),
+                    source_title=title,
+                    text=text,
+                    section_title="ARTICULOS NO VERIFICABLES",
+                    article_label=label,
+                    normalized_text=normalize_for_search(text),
+                    tipo_contenido="disposicion",
+                    user_intents=["consulta_normativa"],
+                    vigencia="no_verificable",
+                    prioridad_retrieval=0,
+                    fuente=str(item.get("fuente", "Ordenanza 227-2019-MDP/C")),
+                    tramite_relacionado="tramite_comercio_ambulatorio",
+                    knowledge_layer="norma_no_verificable",
+                    exclude_from_retrieval=True,
+                    requires_review=True,
+                    metadata={"observacion": text},
+                )
+            )
+        return chunks
 
     def _chunks_from_faq(self, payload: list[dict[str, Any]]) -> list[DocumentChunk]:
         chunks: list[DocumentChunk] = []
@@ -511,13 +845,25 @@ class RetrievalService:
             return "zona"
         if label == "38":
             return "sancion"
+        if label == "57":
+            return "obligacion"
+        if label in {"50", "63", "64"}:
+            return "sancion"
+        if label == "61":
+            return "horario"
+        if label == "62":
+            return "requisito"
         if label == "36":
             return "costo"
+        if label == "21" or "rubro" in normalized or "giro" in normalized:
+            return "rubro"
         if label == "30" or "requisit" in normalized:
             return "requisito"
         if "sisa" in normalized and "pago" in normalized:
             return "costo"
-        if "revoc" in normalized or "sancion" in normalized:
+        if "obligacion" in normalized or "debe " in normalized or "deber" in normalized:
+            return "obligacion"
+        if "revoc" in normalized or "sancion" in normalized or "retiro" in normalized:
             return "sancion"
         if "zona rigida" in normalized:
             return "zona"
@@ -533,3 +879,96 @@ class RetrievalService:
             for token in re.findall(r"[a-záéíóúñ0-9]+", normalized_query)
             if len(token) > 2
         }
+
+
+def _format_tramite_step(item: Any) -> str:
+    if isinstance(item, dict):
+        order = item.get("orden")
+        prefix = f"{order}. " if order else "- "
+        description = str(item.get("descripcion", "")).strip()
+        source = str(item.get("fuente", "")).strip()
+        return f"{prefix}{description}" + (f" Fuente: {source}" if source else "")
+    return f"- {item}"
+
+
+def _format_rubro_permitido(item: Any) -> str:
+    if not isinstance(item, dict):
+        return f"- {item}"
+
+    rubro = str(item.get("rubro", "")).strip()
+    nombre = str(item.get("nombre", "")).strip()
+    fuente = str(item.get("fuente", "")).strip()
+    header = " - ".join(part for part in (rubro, nombre) if part)
+    giros = item.get("giros", [])
+    lines = [header] if header else []
+    for giro in giros:
+        if isinstance(giro, dict):
+            codigo = str(giro.get("codigo", "")).strip()
+            descripcion = str(giro.get("descripcion", "")).strip()
+            label = f"{codigo}: {descripcion}" if codigo else descripcion
+            if label:
+                lines.append(f"  - {label}")
+        elif str(giro).strip():
+            lines.append(f"  - {giro}")
+    if fuente:
+        lines.append(f"  Fuente: {fuente}")
+    return "\n".join(lines)
+
+
+def _looks_like_new_requirement_query(normalized_query: str) -> bool:
+    return any(
+        marker in normalized_query
+        for marker in (
+            "sacar permiso",
+            "sacar mi permiso",
+            "como saco permiso",
+            "como saco mi permiso",
+            "como puedo sacar",
+            "primera vez",
+            "soy nuevo",
+            "quiero vender",
+            "vender en la calle",
+            "vender en la via publica",
+            "vender en via publica",
+            "permiso para vender",
+            "necesito permiso para vender",
+            "ingresar al padron",
+            "ingreso al padron",
+            "inscribirme",
+            "que necesito para vender",
+            "que necesito y cuanto cuesta",
+            "pa vender",
+        )
+    )
+
+
+def _looks_like_renewal_requirement_query(normalized_query: str) -> bool:
+    return any(
+        marker in normalized_query
+        for marker in (
+            "renovar",
+            "renovacion",
+            "como renuevo",
+            "que necesito para renovar",
+            "ya tengo permiso",
+            "ya tengo autorizacion",
+            "permiso esta por vencer",
+            "permiso se vence",
+            "autorizacion vence",
+            "seguir vendiendo",
+            "tengo mi voucher",
+            "voucher",
+        )
+    )
+
+
+def _definition_concept_matches(normalized_query: str, concept: str) -> bool:
+    aliases = {
+        "comercio_ambulatorio": ("comercio ambulatorio", "ambulatorio", "venta ambulante"),
+        "padron_municipal": ("padron", "padron municipal", "registro municipal"),
+        "tupa": ("tupa",),
+        "sisa": ("sisa",),
+        "modulo": ("modulo", "puesto", "stand"),
+        "giro": ("giro", "rubro", "actividad", "tipo de venta"),
+    }
+    return any(marker in normalized_query for marker in aliases.get(concept, (concept,)))

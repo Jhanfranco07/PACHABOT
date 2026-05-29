@@ -22,11 +22,29 @@ FOLLOW_UP_MARKERS = (
     "osea",
     "o sea",
     "entonces",
+    "y cuanto",
+    "y que",
+    "y en",
+    "si es en",
+    "si fuera en",
+    "tambien aplica",
+    "tambien para",
+    "aplica para",
+    "que pasa si",
+    "que pasa si no",
     "en resumen",
     "eso significa",
     "eso quiere decir",
+    "explicamelo",
+    "explicame mas simple",
+    "mas simple",
+    "no entiendo",
+    "no entendi",
     "nono",
     "no no",
+    "en que articulo",
+    "que articulo",
+    "donde dice",
 )
 
 TOPIC_ANCHORS = (
@@ -38,12 +56,28 @@ TOPIC_ANCHORS = (
     "permiso",
     "articulo",
     "feria",
+    "manchay",
+    "miguel grau",
+    "zona rigida",
+    "incumpl",
+    "cumple",
+    "cumplo",
+    "revoc",
+    "retiro",
+    "quitar",
+    "sancion",
+    "costo",
     "comercio",
     "ambulat",
     "tributo",
     "vender",
     "venta",
     "calle",
+    "renov",
+    "voucher",
+    "padron",
+    "nuevo",
+    "dni",
 )
 
 MEMORY_MARKERS = (
@@ -116,6 +150,10 @@ class QueryRewriter:
         if asks_about_memory:
             return question
 
+        pending_query = _query_from_pending_options(normalized_question, history)
+        if pending_query:
+            return pending_query
+
         explicit_follow_up = any(normalized_question.startswith(marker) for marker in FOLLOW_UP_MARKERS)
         has_topic_anchor = any(anchor in normalized_question for anchor in TOPIC_ANCHORS)
         short_question = len(tokens) <= 5
@@ -137,4 +175,91 @@ class QueryRewriter:
         if not recent_user_turn:
             return question
 
+        if any(
+            marker in normalized_question
+            for marker in ("explicamelo", "explicame mas simple", "mas simple", "no entiendo", "no entendi")
+        ):
+            return (
+                f"{recent_user_turn}. Seguimiento: explicar en lenguaje mas sencillo "
+                f"la respuesta anterior: {question}"
+            )
+
+        recent_context = normalize_for_search(recent_user_turn)
+        if any(marker in normalized_question for marker in ("que llevo", "que papeles", "papeles llevo", "documentos llevo")):
+            if _looks_like_renewal_context(recent_context):
+                return "Que documentos debe llevar para renovar una autorizacion de comercio ambulatorio?"
+            if _looks_like_new_context(recent_context):
+                return (
+                    "Que requisitos debe presentar una persona nueva para solicitar "
+                    "ingreso al padron municipal de comercio ambulatorio?"
+                )
+        if any(marker in normalized_question for marker in ("cuanto cuesta", "costo", "monto")):
+            if _looks_like_renewal_context(recent_context):
+                return "Cual es el costo de renovacion de comercio ambulatorio segun el TUPA vigente?"
+            if _looks_like_new_context(recent_context):
+                return "Cual es el costo del tramite nuevo de comercio ambulatorio segun el TUPA vigente?"
+
         return f"{recent_user_turn}. Seguimiento: {question}"
+
+
+def _looks_like_new_context(normalized_text: str) -> bool:
+    return any(
+        marker in normalized_text
+        for marker in (
+            "primera vez",
+            "soy nuevo",
+            "sacar permiso",
+            "como saco",
+            "quiero vender",
+            "vender en la calle",
+            "vender en la via publica",
+            "ingreso al padron",
+            "inscribirme",
+        )
+    )
+
+
+def _looks_like_renewal_context(normalized_text: str) -> bool:
+    return any(
+        marker in normalized_text
+        for marker in (
+            "renovar",
+            "renovacion",
+            "ya tengo permiso",
+            "ya tengo autorizacion",
+            "permiso vence",
+            "permiso esta por vencer",
+            "seguir vendiendo",
+            "voucher",
+        )
+    )
+
+
+def _query_from_pending_options(
+    normalized_question: str,
+    history: list[ConversationTurn],
+) -> str:
+    last_assistant = next((turn for turn in reversed(history) if turn.role == "assistant"), None)
+    if last_assistant is None:
+        return ""
+    pending_options = last_assistant.metadata.get("pending_options", {})
+    if not isinstance(pending_options, dict):
+        return ""
+
+    normalized = normalized_question.strip()
+    for key, option in pending_options.items():
+        if not isinstance(option, dict):
+            continue
+        query = str(option.get("query", "")).strip()
+        if not query:
+            continue
+        if normalized == normalize_for_search(str(key)):
+            return query
+        aliases = option.get("aliases", [])
+        if any(
+            normalized == normalize_for_search(str(alias))
+            or normalize_for_search(str(alias)) in normalized
+            for alias in aliases
+        ):
+            return query
+    return ""

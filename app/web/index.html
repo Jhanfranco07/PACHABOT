@@ -179,7 +179,7 @@
         </div>
       </div>
       <section class="settings">
-        <label class="label" for="model">Modelo Ollama</label>
+        <label class="label" for="model">Modelo LLM</label>
         <select id="model"></select>
         <label class="label">Respuesta</label>
         <div class="presets">
@@ -191,14 +191,14 @@
           <input id="temperature" type="number" min="0" max="2" step="0.1" value="0.2" title="Temperatura">
           <input id="tokens" type="number" min="32" max="2048" step="10" value="400" title="Tokens máximos">
         </div>
-        <button id="apply" class="apply" type="button">Aplicar configuración</button>
+        <button id="apply" class="apply" type="button">Aplicar configuracion</button>
         <button id="reset" class="reset" type="button">Nueva conversación</button>
         <div class="notice" id="config-status">
-          El modo veloz desactiva pensamiento extendido y responde con mayor rapidez.
+          El modo veloz desactiva pensamiento extendido cuando se usa IA local.
         </div>
         <div class="notice">
-          PachaBot conversa con Ollama. Para consultas municipales recupera
-          documentos y te indica si la respuesta tiene evidencia.
+          PachaBot usa el proveedor LLM configurado. Con OpenAI activo, Ollama no
+          se consulta ni se inicia.
         </div>
       </section>
     </aside>
@@ -208,7 +208,7 @@
           <div class="avatar">P</div>
           <div>
             <strong>Asistente municipal</strong>
-            <div class="online" id="runtime">conectando con Ollama...</div>
+            <div class="online" id="runtime">conectando con el proveedor LLM...</div>
           </div>
         </div>
         <div class="badge" id="mode-badge">VELOZ</div>
@@ -250,6 +250,14 @@
       } else {
         byId("tokens").value = 400;
       }
+    }
+    function providerLabelFor(provider) {
+      if (provider === "openai") return "OpenAI";
+      if (provider === "ollama") return "Ollama";
+      if (provider === "openrouter") return "OpenRouter";
+      if (provider === "groq") return "Groq";
+      if (provider === "grok") return "xAI";
+      return "Proveedor LLM";
     }
     function appendMessage(text, owner, metadata = "", origin = null) {
       const wrapper = document.createElement("div");
@@ -294,11 +302,14 @@
         byId("temperature").value = config.temperature || 0.2;
         byId("tokens").value = config.max_tokens || 400;
         setThink(Boolean(config.think));
-        byId("runtime").textContent = config.available ? `${config.active_model} disponible` : "Ollama no disponible";
+        const providerLabel = providerLabelFor(config.provider);
+        byId("runtime").textContent = config.available
+          ? `${providerLabel}: ${config.active_model}`
+          : `${providerLabel} no disponible`;
         if (config.message) setStatus(config.message, !config.available);
       } catch (error) {
         byId("runtime").textContent = "API no disponible";
-        setStatus("No se pudo consultar Ollama. Revisa que el servidor esté iniciado.", true);
+        setStatus("No se pudo consultar la configuracion del proveedor LLM. Revisa que el servidor este iniciado.", true);
       }
     }
     async function applyConfig() {
@@ -314,9 +325,10 @@
         body: JSON.stringify(payload)
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.detail || "No se pudo configurar Ollama.");
-      byId("runtime").textContent = `${result.active_model} disponible`;
-      setStatus(`Activo: ${result.active_model} | ${result.think ? "pensamiento" : "veloz"} | máximo ${result.max_tokens} tokens.`);
+      if (!response.ok) throw new Error(result.detail || "No se pudo configurar el proveedor LLM.");
+      const providerLabel = providerLabelFor(result.provider);
+      byId("runtime").textContent = `${providerLabel}: ${result.active_model}`;
+      setStatus(`Activo: ${providerLabel} | ${result.active_model} | ${result.think ? "pensamiento" : "veloz"} | maximo ${result.max_tokens} tokens.`);
     }
     async function sendMessage(text) {
       appendMessage(text, "user", new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}));
@@ -339,11 +351,11 @@
         waiting.remove();
         let origin;
         if (data.response_origin === "llm_conversation") {
-          origin = {kind: "llm", label: `Conversación con Ollama (${data.model_used})`};
+          origin = {kind: "llm", label: `Conversacion con LLM (${data.model_used})`};
         } else if (data.response_origin === "llm") {
-          origin = {kind: "llm", label: `Ollama + documentos (${data.model_used})`};
+          origin = {kind: "llm", label: `LLM + documentos (${data.model_used})`};
         } else if (data.response_origin === "llm_no_evidence") {
-          origin = {kind: "guard", label: `Ollama - no encontró evidencia documental (${data.model_used})`};
+          origin = {kind: "guard", label: `LLM - sin evidencia documental (${data.model_used})`};
         } else if (data.response_origin === "system") {
           origin = {kind: "system", label: "Mensaje del sistema - sin LLM"};
         } else {
@@ -351,7 +363,7 @@
         }
         let runtime = `Intención: ${data.intent} | Fuentes: ${data.sources.length}`;
         if (data.response_origin === "fallback") {
-          runtime += " | Ollama no invocado o sin evidencia suficiente";
+          runtime += " | LLM no invocado o sin evidencia suficiente";
         }
         appendMessage(data.answer, "bot", runtime, origin);
       } catch (error) {

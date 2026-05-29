@@ -51,6 +51,24 @@ class ConversationMemoryStore:
             limit = self.settings.memory_history_limit
         return history[-limit:]
 
+    def get_conversation_context(self, channel: str, session_id: str) -> dict[str, object]:
+        """Return a compact conversational state for routing, debug or future MCP tools."""
+
+        history = self.load_history(channel, session_id)
+        last_user = next((turn for turn in reversed(history) if turn.role == "user"), None)
+        last_assistant = next((turn for turn in reversed(history) if turn.role == "assistant"), None)
+        assistant_metadata = last_assistant.metadata if last_assistant else {}
+        return {
+            "last_user_message": last_user.text if last_user else "",
+            "last_intent": assistant_metadata.get("intent", ""),
+            "last_sources": assistant_metadata.get("sources", []),
+            "last_confidence": assistant_metadata.get("confidence", 0.0),
+            "last_confidence_level": assistant_metadata.get("confidence_level", ""),
+            "last_response_origin": assistant_metadata.get("response_origin", ""),
+            "pending_data": assistant_metadata.get("pending_data", []),
+            "turn_count": len(history),
+        }
+
     def append_turn(self, channel: str, session_id: str, turn: ConversationTurn) -> None:
         """Append a single turn and trim old memory."""
 

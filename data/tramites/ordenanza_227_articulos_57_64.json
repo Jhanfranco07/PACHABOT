@@ -1,0 +1,65 @@
+{
+  "id": "ordenanza_227_articulos_57_64",
+  "nombre": "Articulos 57 al 64 de la Ordenanza 227-2019-MDP/C",
+  "descripcion": "Registro de control para articulos cuyo texto completo no esta disponible o no ha sido verificado en la base documental cargada.",
+  "articulos": [
+    {
+      "articulo": "57",
+      "observacion": "La fuente disponible esta truncada durante el Articulo 57. No debe usarse para respuestas firmes.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "58",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "59",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "60",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "61",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "62",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "63",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    },
+    {
+      "articulo": "64",
+      "observacion": "No hay texto verificable cargado para este articulo. No inventar contenido.",
+      "fuente": "Ordenanza 227-2019-MDP/C",
+      "exclude_from_retrieval": true,
+      "requires_review": true
+    }
+  ],
+  "estado_revision": "pendiente_fuente_oficial",
+  "requiere_validacion_humana": true
+}

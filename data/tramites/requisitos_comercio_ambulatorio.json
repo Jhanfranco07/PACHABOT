@@ -1,0 +1,97 @@
+{
+  "tramite": "Comercio ambulatorio",
+  "area_responsable": "Subgerencia de Licencias Comerciales y Autorizaciones",
+  "descripcion": "Requisitos diferenciados para solicitud nueva e ingreso al padron municipal, y para renovacion de autorizacion de comercio ambulatorio.",
+  "fuentes": [
+    {
+      "nombre": "Ficha interna de requisitos de comercio ambulatorio",
+      "tipo": "documento interno de orientacion",
+      "area": "Subgerencia de Licencias Comerciales y Autorizaciones"
+    },
+    {
+      "nombre": "Ordenanza N. 227-2019-MDP/C",
+      "tipo": "ordenanza municipal",
+      "observacion": "Sirve como respaldo normativo general para comercio ambulatorio."
+    }
+  ],
+  "tipos_tramite": [
+    {
+      "id": "nuevo_ingreso_padron",
+      "nombre": "Tramite nuevo / ingreso al padron municipal",
+      "cuando_aplica": [
+        "Cuando la persona solicita permiso por primera vez.",
+        "Cuando la persona quiere vender en la via publica y aun no cuenta con autorizacion.",
+        "Cuando la persona quiere ingresar al padron municipal de comerciantes."
+      ],
+      "frases_usuario": [
+        "como saco mi permiso de comercio ambulatorio",
+        "que necesito para vender",
+        "quiero vender en la via publica",
+        "quiero sacar permiso por primera vez",
+        "soy nuevo",
+        "quiero inscribirme",
+        "quiero vender en la calle",
+        "necesito permiso para vender",
+        "q necesito pa vender",
+        "como saco permiso",
+        "quiero vender comida",
+        "hijito quiero vender desayuno que hago"
+      ],
+      "requisitos": [
+        "Solicitud con caracter de declaracion jurada de ingreso al padron municipal.",
+        "Declaracion jurada de no haber sido sujeto de queja por parte de vecinos por inconducta debidamente comprobada en el ejercicio del comercio en via publica y no haber sido sujeto de infracciones administrativas.",
+        "Declaracion jurada donde el solicitante comunique que no sobrepasa las dos UIT anuales, que no tiene vinculo laboral con sus proveedores y que se encuentra en estado de necesidad economica y social.",
+        "Copia de DNI.",
+        "Foto panoramica del lugar donde se desea realizar el comercio."
+      ],
+      "explicacion_ciudadana": "Para sacar tu permiso por primera vez, debes presentar una solicitud para ingresar al padron municipal. Tambien te pediran declaraciones juradas, copia de tu DNI y una foto panoramica del lugar donde quieres vender. Luego, la municipalidad evalua si la zona, el giro y el espacio son adecuados.",
+      "explicacion_simple": "Para empezar, debes pedir tu permiso en la municipalidad. Te van a pedir una solicitud para ingresar al padron, declaraciones juradas, copia de tu DNI y una foto del lugar donde quieres vender. Luego, la municipalidad revisa si ese lugar y el tipo de venta pueden autorizarse.",
+      "no_confundir_con": [
+        "No mezclar con requisitos de renovacion.",
+        "No agregar dos fotos tamano carne como requisito principal del tramite nuevo.",
+        "No agregar copia del ultimo voucher como requisito principal del tramite nuevo."
+      ]
+    },
+    {
+      "id": "renovacion",
+      "nombre": "Renovacion de autorizacion de comercio ambulatorio",
+      "cuando_aplica": [
+        "Cuando la persona ya tiene autorizacion vigente o anterior.",
+        "Cuando la autorizacion esta por vencer.",
+        "Cuando la persona quiere seguir vendiendo con autorizacion municipal."
+      ],
+      "frases_usuario": [
+        "como renuevo mi permiso",
+        "que necesito para renovar",
+        "ya tengo autorizacion quiero renovar",
+        "mi permiso esta por vencer",
+        "renovacion de comercio ambulatorio",
+        "quiero seguir vendiendo",
+        "ya tengo permiso",
+        "mi autorizacion vence pronto",
+        "tengo mi voucher",
+        "mi permiso se vence",
+        "renovar comercio ambulatorio"
+      ],
+      "requisitos": [
+        "Formato o solicitud de renovacion.",
+        "Declaraciones juradas correspondientes.",
+        "Copia de DNI.",
+        "Dos fotos tamano carne.",
+        "Copia del ultimo voucher o comprobante de pago."
+      ],
+      "explicacion_ciudadana": "Si ya tienes autorizacion y quieres renovarla, debes presentar el formato de renovacion, las declaraciones juradas correspondientes, copia de tu DNI, dos fotos tamano carne y copia del ultimo voucher o comprobante de pago. Es recomendable iniciar la renovacion antes de que venza tu autorizacion.",
+      "explicacion_simple": "Si ya tienes permiso y se va a vencer, debes pedir la renovacion. Lleva el formato de renovacion, tus declaraciones juradas, copia de tu DNI, dos fotos tamano carne y copia del ultimo voucher de pago.",
+      "no_confundir_con": [
+        "No mezclar con el ingreso al padron municipal.",
+        "No responder renovacion cuando el usuario dice que es nuevo o que quiere sacar permiso por primera vez."
+      ]
+    }
+  ],
+  "observaciones_generales": [
+    "El costo exacto debe validarse con el TUPA vigente.",
+    "La autorizacion depende de evaluacion municipal.",
+    "La ubicacion, giro y condiciones del espacio deben ser revisadas por la municipalidad.",
+    "La informacion debe mantenerse actualizada por el area responsable."
+  ]
+}

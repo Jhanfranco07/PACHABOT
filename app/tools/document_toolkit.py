@@ -7,6 +7,7 @@ from app.models.domain import QueryIntent
 from app.models.schemas import ConversationTurn, KnowledgeBundle, RetrievedChunk, RoutedQuery
 from app.services.query_rewriter import QueryRewriter
 from app.services.retrieval_service import RetrievalService
+from app.utils.query_expansion import expansion_terms, related_search_queries
 from app.utils.text_cleaner import normalize_for_search
 
 
@@ -23,18 +24,6 @@ COMMON_TYPO_HINTS = {
     "sissa": "sisa",
     "modlo": "modulo",
 }
-
-INTENT_EXPANSIONS = {
-    QueryIntent.REQUISITOS: "requisitos autorizacion tramite declaracion jurada dni",
-    QueryIntent.MODULOS: "modulo medidas dimensiones especificaciones tecnicas",
-    QueryIntent.PAGOS_SISA: "sisa pago tributo monto diario",
-    QueryIntent.ZONAS_RIGIDAS: "zonas rigidas zonas prohibidas via publica",
-    QueryIntent.AUTORIZACIONES: "autorizacion permiso vigencia renovacion",
-    QueryIntent.FERIAS: "ferias feria temporal autorizacion especial",
-    QueryIntent.PROHIBICIONES: "prohibiciones sanciones restricciones",
-    QueryIntent.NORMATIVA: "ordenanza reglamenta comercio ambulatorio modificatoria",
-}
-
 
 class DocumentToolkit:
     """Prepare queries, recover document evidence and package it for answer generation."""
@@ -108,6 +97,9 @@ class DocumentToolkit:
             notes.append("La consulta se reformulo usando el historial reciente.")
         if any(chunk.requires_review for chunk in final_chunks):
             notes.append("La evidencia recuperada contiene informacion pendiente de validacion humana.")
+        expanded_terms = expansion_terms(effective_query, routed_query.intent)
+        if expanded_terms:
+            notes.append(f"Terminos expandidos: {', '.join(expanded_terms[:12])}")
 
         return KnowledgeBundle(
             original_query=original_question,
@@ -128,7 +120,7 @@ class DocumentToolkit:
     ) -> list[str]:
         """Create a small set of search queries without overfitting to hand-written rules."""
 
-        queries = [effective_query]
+        queries = [question, effective_query]
         normalized_question = normalize_for_search(question)
 
         article_match = ARTICLE_PATTERN.search(question)
@@ -138,14 +130,8 @@ class DocumentToolkit:
         if any(pattern in normalized_question for pattern in ("que es", "defin", "se entiende", "concepto")):
             queries.append(f"{effective_query} definiciones")
 
-        expansion = INTENT_EXPANSIONS.get(routed_query.intent)
-        if (
-            routed_query.intent == QueryIntent.PAGOS_SISA
-            and "sisa" not in normalize_for_search(f"{question} {effective_query}")
-        ):
-            expansion = None
-        if expansion:
-            queries.append(f"{effective_query} {expansion}")
+        queries.extend(related_search_queries(question, routed_query.intent))
+        queries.extend(related_search_queries(effective_query, routed_query.intent))
 
         return list(dict.fromkeys(query.strip() for query in queries if query.strip()))
 
@@ -172,6 +158,10 @@ class DocumentToolkit:
             "feria": "feria",
             "zona rigida": "zona rigida",
             "autoriz": "autoriz",
+            "giro": "giro",
+            "giros": "giro",
+            "rubro": "rubro",
+            "rubros": "rubro",
         }
 
         reranked: list[RetrievedChunk] = []
@@ -227,6 +217,47 @@ class DocumentToolkit:
 
         reranked.sort(key=lambda item: item.score, reverse=True)
 
+        if intent == QueryIntent.DEFINICION or asks_definition:
+            current_definitions = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido == "definicion" and chunk.vigencia == "vigente"
+            ]
+            if current_definitions:
+                return current_definitions[: self.settings.retrieval_top_k]
+
+        asks_cost_and_requirements = any(
+            term in normalized_effective_query or term in normalized_question
+            for term in ("cuanto cuesta", "costo", "monto", "tasa", "pago")
+        ) and any(
+            term in normalized_effective_query or term in normalized_question
+            for term in ("requisit", "documento", "que necesito")
+        )
+        if intent in {
+            QueryIntent.REQUISITOS_NUEVO,
+            QueryIntent.REQUISITOS_RENOVACION,
+            QueryIntent.REQUISITOS_AMBIGUO,
+        }:
+            requirement_case_chunks = self._requirement_case_chunks(
+                reranked,
+                intent,
+                include_cost=asks_cost_and_requirements,
+            )
+            if requirement_case_chunks:
+                return requirement_case_chunks[: self.settings.retrieval_top_k]
+            if intent == QueryIntent.REQUISITOS_AMBIGUO:
+                return []
+
+        if asks_cost_and_requirements:
+            useful = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido in {"requisito", "costo"}
+                or chunk.knowledge_layer in {"tramites", "faq"}
+            ]
+            if useful:
+                return useful[: self.settings.retrieval_top_k]
+
         # CAMBIO FASE OLLAMA 5 — Exigir evidencia monetaria para responder costos.
         # Motivo: una coincidencia con la palabra tramite no acredita un precio vigente.
         # Riesgo mitigado: las consultas explicitas de SISA conservan sus chunks de monto.
@@ -267,7 +298,11 @@ class DocumentToolkit:
                 ]
             return cost_chunks[: self.settings.retrieval_top_k]
 
-        if intent == QueryIntent.REQUISITOS:
+        if intent in {
+            QueryIntent.REQUISITOS,
+            QueryIntent.REQUISITOS_NUEVO,
+            QueryIntent.REQUISITOS_RENOVACION,
+        }:
             current_authorization_requirements = [
                 chunk
                 for chunk in reranked
@@ -288,12 +323,49 @@ class DocumentToolkit:
                     )
                 ]
                 if citizen_guidance:
-                    return citizen_guidance[: self.settings.retrieval_top_k]
+                    procedure_guidance = [
+                        chunk
+                        for chunk in reranked
+                        if chunk.knowledge_layer == "tramites"
+                        and chunk.tipo_contenido == "procedimiento"
+                        and any(
+                            marker in normalize_for_search(chunk.chunk_id + " " + chunk.section_title)
+                            for marker in ("pasos", "procedimiento")
+                        )
+                    ]
+                    if not procedure_guidance:
+                        procedure_guidance = [
+                            self._retrieved_from_index_chunk(chunk, citizen_guidance[0].score - 0.05)
+                            for chunk in self.retrieval_service.chunks
+                            if chunk.knowledge_layer == "tramites"
+                            and chunk.tipo_contenido == "procedimiento"
+                            and "pasos" in normalize_for_search(chunk.chunk_id + " " + chunk.section_title)
+                        ]
+                    return [*citizen_guidance, *procedure_guidance][
+                        : self.settings.retrieval_top_k
+                    ]
                 article_30 = [
                     chunk for chunk in current_authorization_requirements
                     if chunk.article_label == "30"
                 ]
                 return article_30[:1] or current_authorization_requirements[:1]
+
+        if intent == QueryIntent.MODULOS:
+            module_chunks = [
+                chunk
+                for chunk in reranked
+                if (
+                    chunk.tipo_contenido in {"modulo", "definicion"}
+                    and (
+                        "modulo" in normalize_for_search(chunk.text)
+                        or "mobiliario" in normalize_for_search(chunk.text)
+                    )
+                )
+                or "especificaciones tecnicas" in normalize_for_search(chunk.text)
+                or "parametros tecnicos" in normalize_for_search(chunk.text)
+            ]
+            if module_chunks:
+                return module_chunks[: self.settings.retrieval_top_k]
 
         if intent == QueryIntent.ZONAS_RIGIDAS:
             # CAMBIO FASE 7.2 - Encabezar el contexto con la restriccion vigente explicita.
@@ -325,6 +397,89 @@ class DocumentToolkit:
                     : self.settings.retrieval_top_k
                 ]
 
+        if intent == QueryIntent.RUBROS:
+            rubro_chunks = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido == "rubro"
+                or chunk.article_label == "21"
+                or "rubros permitidos" in normalize_for_search(chunk.section_title)
+                or "giros permitidos" in normalize_for_search(chunk.text)
+            ]
+            rubro_chunks.sort(
+                key=lambda chunk: (
+                    chunk.knowledge_layer == "tramites",
+                    chunk.article_label == "21",
+                    chunk.score,
+                ),
+                reverse=True,
+            )
+            if rubro_chunks:
+                return rubro_chunks[: self.settings.retrieval_top_k]
+
+        if intent == QueryIntent.AUTORIZACIONES:
+            authorization_chunks = [
+                chunk
+                for chunk in reranked
+                if (
+                    "autoriz" in normalize_for_search(chunk.text)
+                    or chunk.article_label in {"6", "7", "7A", "8A", "30", "50"}
+                )
+                and chunk.tipo_contenido not in {"zona", "prohibicion"}
+            ]
+            if authorization_chunks:
+                return authorization_chunks[: self.settings.retrieval_top_k]
+
+        if intent in {QueryIntent.OBLIGACIONES, QueryIntent.SANCIONES, QueryIntent.REVOCACION}:
+            related_types = {"obligacion", "sancion", "prohibicion"}
+            related_articles = {"38", "50", "57", "63", "64"}
+            obligation_or_sanction_chunks = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido in related_types
+                or chunk.article_label in related_articles
+                or any(
+                    marker in normalize_for_search(chunk.text)
+                    for marker in ("incumpl", "revoc", "retiro", "sancion", "obligacion")
+                )
+            ]
+            if intent in {QueryIntent.SANCIONES, QueryIntent.REVOCACION}:
+                obligation_or_sanction_chunks.sort(
+                    key=lambda chunk: (
+                        chunk.tipo_contenido == "sancion",
+                        chunk.article_label in {"38", "50", "63", "64"},
+                        chunk.score,
+                    ),
+                    reverse=True,
+                )
+            if obligation_or_sanction_chunks:
+                return obligation_or_sanction_chunks[: self.settings.retrieval_top_k]
+
+        if intent == QueryIntent.HORARIO:
+            horario_chunks = [
+                chunk
+                for chunk in reranked
+                if chunk.tipo_contenido == "horario"
+                or chunk.article_label == "61"
+                or "horario" in normalize_for_search(chunk.text)
+            ]
+            if horario_chunks:
+                return horario_chunks[: self.settings.retrieval_top_k]
+
+        if intent == QueryIntent.FERIAS:
+            normalized_all = f"{normalized_question} {normalized_effective_query}"
+            if any(term in normalized_all for term in ("bano", "baño", "servicios higienicos", "servicio higienico")):
+                hygiene_chunks = [
+                    chunk
+                    for chunk in reranked
+                    if chunk.article_label == "62"
+                    or "servicios higienicos" in normalize_for_search(chunk.text)
+                    or "bano" in normalize_for_search(chunk.text)
+                    or "baño" in normalize_for_search(chunk.text)
+                ]
+                if hygiene_chunks:
+                    return hygiene_chunks[: self.settings.retrieval_top_k]
+
         if intent == QueryIntent.NORMATIVA:
             identity_chunks = self._normative_identity_evidence()
             if identity_chunks:
@@ -333,7 +488,7 @@ class DocumentToolkit:
                 # Riesgo mitigado: solo se seleccionan encabezados oficiales del corpus cargado.
                 return identity_chunks[: self.settings.retrieval_top_k]
 
-        if asks_definition:
+        if intent == QueryIntent.DEFINICION or asks_definition:
             current_definitions = [
                 chunk
                 for chunk in reranked
@@ -346,6 +501,54 @@ class DocumentToolkit:
                 return current_definitions[: self.settings.retrieval_top_k]
 
         return reranked[: self.settings.retrieval_top_k]
+
+    def _requirement_case_chunks(
+        self,
+        chunks: list[RetrievedChunk],
+        intent: QueryIntent,
+        *,
+        include_cost: bool,
+    ) -> list[RetrievedChunk]:
+        """Select the maintained requirement case without mixing it with the other case."""
+
+        if intent == QueryIntent.REQUISITOS_NUEVO:
+            selected_case = "nuevo_ingreso_padron"
+        elif intent == QueryIntent.REQUISITOS_RENOVACION:
+            selected_case = "renovacion"
+        else:
+            return []
+
+        selected = [
+            chunk
+            for chunk in chunks
+            if (
+                chunk.document_id == "requisitos_comercio_ambulatorio"
+                and chunk.metadata.get("tipo_tramite") == selected_case
+            )
+        ]
+        if not selected:
+            selected = [
+                self._retrieved_from_index_chunk(chunk, 5.0)
+                for chunk in self.retrieval_service.chunks
+                if (
+                    chunk.document_id == "requisitos_comercio_ambulatorio"
+                    and chunk.metadata.get("tipo_tramite") == selected_case
+                )
+            ]
+        selected.sort(key=lambda chunk: chunk.score, reverse=True)
+
+        cost_chunks: list[RetrievedChunk] = []
+        if include_cost:
+            cost_chunks = [
+                chunk
+                for chunk in chunks
+                if chunk.tipo_contenido == "costo"
+                and (
+                    chunk.knowledge_layer == "tramites"
+                    or "tupa" in normalize_for_search(chunk.text)
+                )
+            ]
+        return [*selected[:1], *cost_chunks[:1]]
 
     def _normative_identity_evidence(self) -> list[RetrievedChunk]:
         """Recover document-title evidence needed for questions about the governing norm."""
@@ -404,17 +607,42 @@ class DocumentToolkit:
             )
         return evidence
 
+    @staticmethod
+    def _retrieved_from_index_chunk(chunk, score: float) -> RetrievedChunk:
+        """Promote a known indexed guidance record into the current evidence set."""
+
+        return RetrievedChunk(
+            chunk_id=chunk.chunk_id,
+            document_id=chunk.document_id,
+            source_title=chunk.source_title,
+            text=chunk.text,
+            score=score,
+            section_title=chunk.section_title,
+            article_label=chunk.article_label,
+            normalized_text=chunk.normalized_text,
+            tipo_contenido=chunk.tipo_contenido,
+            user_intents=chunk.user_intents,
+            vigencia=chunk.vigencia,
+            modificado_por=chunk.modificado_por,
+            prioridad_retrieval=chunk.prioridad_retrieval,
+            fuente=chunk.fuente,
+            tramite_relacionado=chunk.tramite_relacionado,
+            knowledge_layer=chunk.knowledge_layer,
+            exclude_from_retrieval=chunk.exclude_from_retrieval,
+            requires_review=chunk.requires_review,
+            metadata=chunk.metadata,
+        )
+
     def _format_source(self, chunk: RetrievedChunk) -> str:
         """Create a concise source string."""
 
         if chunk.fuente:
-            return f"{chunk.fuente} | Estado: {chunk.vigencia.upper()}"
+            return chunk.fuente
         parts = [chunk.source_title]
         if chunk.article_label:
             parts.append(f"Art. {chunk.article_label}")
         elif chunk.section_title:
             parts.append(chunk.section_title)
-        parts.append(f"Estado: {chunk.vigencia.upper()}")
         return " | ".join(parts)
 
     def _correct_spelling(self, question: str) -> str:

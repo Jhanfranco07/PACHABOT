@@ -22,6 +22,9 @@ SOURCE_TYPES = {
     "faq": "faq",
     "chunks": "chunk_documental",
     "consolidated": "norma_consolidada",
+    "norma_consolidada": "norma_consolidada",
+    "zonas": "zona_restringida",
+    "norma_no_verificable": "norma_no_verificable",
     "normativa": "ordenanza",
 }
 
@@ -55,12 +58,24 @@ class EvidenceService:
         sufficient = bool(usable) and top_score >= self.settings.retrieval_min_score
 
         if not sufficient:
+            warning = (
+                "Por ahora no encontré información suficiente en los documentos cargados "
+                "para responderte con seguridad. Te recomiendo validarlo con el área "
+                "municipal correspondiente."
+            )
+            if items:
+                warning = (
+                    "Encontré algunas coincidencias, pero todavía no alcanzan para responderte "
+                    "con seguridad. Lo mejor es validarlo con el área municipal correspondiente."
+                )
             return EvidenceAssessment(
                 sufficient=False,
                 confidence_level="low",
-                warning=(
-                    "No se encontro informacion suficiente en la base documental "
-                    "cargada para responder con seguridad."
+                warning=warning,
+                old_warning=(
+                    "No encontré información suficiente en la base documental cargada "
+                    "para responder con seguridad. Se recomienda validar la información "
+                    "con el área municipal competente."
                 ),
                 items=items,
             )
@@ -95,6 +110,7 @@ class EvidenceService:
         ensure_directory(self.settings.runtime_debug_dir)
         session = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{message.channel}_{message.session_id}")[:120]
         trace_path = self.settings.runtime_debug_dir / f"{session}.jsonl"
+        sources_reviewed = sorted({item.source_type for item in assessment.items})
         trace = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "channel": message.channel,
@@ -103,10 +119,15 @@ class EvidenceService:
             "effective_query": knowledge.effective_query,
             "intent": routed.intent.value,
             "search_queries": knowledge.search_queries,
+            "search_attempts": len(knowledge.search_queries),
+            "retrieval_notes": knowledge.notes,
+            "sources_reviewed": sources_reviewed,
+            "results_found": len(knowledge.chunks),
             "sufficient": assessment.sufficient,
             "confidence_level": assessment.confidence_level,
             "confidence_score": payload.confidence,
             "warning": assessment.warning,
+            "insufficiency_reason": "" if assessment.sufficient else assessment.warning,
             "used_llm": payload.used_llm,
             "response_origin": payload.response_origin,
             "evidence": [asdict(item) for item in assessment.items],

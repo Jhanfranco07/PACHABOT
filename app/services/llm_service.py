@@ -26,6 +26,22 @@ except ImportError:  # pragma: no cover
     OpenAI = None
 
 
+OLLAMA_DISABLED_MESSAGE = (
+    "Ollama está desactivado. Para usar IA local, configura "
+    "OLLAMA_ENABLED=true e inicia Ollama manualmente."
+)
+OPENAI_API_KEY_MISSING_MESSAGE = "Falta configurar OPENAI_API_KEY en el archivo .env."
+OPENAI_MODEL_UNAVAILABLE_MESSAGE = (
+    "El modelo configurado en OPENAI_MODEL no está disponible. Revisa el nombre del modelo."
+)
+OPENAI_QUOTA_MESSAGE = "No se pudo completar la consulta por límite de cuota o saldo de OpenAI."
+OPENAI_CONNECTION_MESSAGE = (
+    "No se pudo conectar con OpenAI. Revisa tu conexion a internet, OPENAI_BASE_URL "
+    "y que la API key este vigente."
+)
+SUPPORTED_PROVIDERS = {"openai", "ollama", "openrouter", "grok", "groq", "mock"}
+
+
 class LLMService:
     """Generate answers using an external LLM when available, with honest local fallbacks."""
 
@@ -33,9 +49,16 @@ class LLMService:
         self.settings = settings
         self.logger = logger.getChild("llm_service")
         self.client = None
-        self.provider = settings.llm_provider.lower().strip()
+        self.provider = (settings.llm_provider or "openai").lower().strip() or "openai"
+        if self.provider not in SUPPORTED_PROVIDERS:
+            self.logger.warning(
+                "Proveedor LLM no reconocido (%s). Se usara OpenAI por defecto.",
+                settings.llm_provider,
+            )
+            self.provider = "openai"
         self._model_cooldowns: dict[str, float] = {}
         self._inline_system_models: set[str] = set()
+        self._inactive_reason: str | None = None
 
         if settings.llm_mode == "mock" and self.provider != "ollama":
             return
@@ -44,10 +67,20 @@ class LLMService:
         # Motivo: Telegram y RAG consumen una sola interfaz de generacion.
         # Riesgo mitigado: la rama Ollama no modifica los clientes remotos existentes.
         if self.provider == "ollama":
+            if not settings.ollama_enabled:
+                self._inactive_reason = OLLAMA_DISABLED_MESSAGE
+                self.logger.warning(OLLAMA_DISABLED_MESSAGE)
+                return
             self.client = object()
             return
 
+        if self.provider == "openai" and not settings.openai_api_key:
+            self._inactive_reason = OPENAI_API_KEY_MISSING_MESSAGE
+            self.logger.warning(OPENAI_API_KEY_MISSING_MESSAGE)
+            return
+
         if OpenAI is None:
+            self._inactive_reason = "Falta instalar la dependencia openai para usar este proveedor."
             return
 
         client_kwargs = self._build_client_kwargs()
@@ -210,6 +243,10 @@ class LLMService:
     def check_ollama_available(self) -> bool:
         """Return whether the configured Ollama model is installed and reachable."""
 
+        if not self.settings.ollama_enabled:
+            self.logger.warning(OLLAMA_DISABLED_MESSAGE)
+            return False
+
         try:
             response = self._request_ollama_json("/api/tags")
         except RuntimeError as exc:
@@ -236,6 +273,7 @@ class LLMService:
     def list_ollama_models(self) -> list[str]:
         """List locally installed Ollama models for development interfaces."""
 
+        self._ensure_ollama_enabled()
         response = self._request_ollama_json("/api/tags")
         models = {
             model_name
@@ -258,6 +296,7 @@ class LLMService:
 
         if self.provider != "ollama":
             raise RuntimeError("El proveedor activo no es Ollama.")
+        self._ensure_ollama_enabled()
         installed_models = self.list_ollama_models()
         if model not in installed_models:
             raise ValueError(f"El modelo Ollama no esta instalado: {model}")
@@ -285,6 +324,7 @@ class LLMService:
     ) -> str:
         """Generate text through Ollama's local native API."""
 
+        self._ensure_ollama_enabled()
         _ = temperature
         response = self._request_ollama_json(
             "/api/generate",
@@ -318,6 +358,7 @@ class LLMService:
     ) -> dict[str, object]:
         """Execute one Ollama request and validate its JSON response."""
 
+        self._ensure_ollama_enabled()
         url = f"{self.settings.ollama_base_url}{endpoint}"
         body = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = urllib_request.Request(
@@ -347,6 +388,12 @@ class LLMService:
             raise RuntimeError("Ollama devolvio un formato de respuesta inesperado.")
         return decoded
 
+    def _ensure_ollama_enabled(self) -> None:
+        """Stop local model requests unless Ollama was explicitly enabled."""
+
+        if not self.settings.ollama_enabled:
+            raise RuntimeError(OLLAMA_DISABLED_MESSAGE)
+
     @staticmethod
     def _render_ollama_prompt(
         system_prompt: str,
@@ -372,6 +419,7 @@ class LLMService:
     ) -> str:
         """Call the external provider for a single model candidate."""
 
+        request_temperature = self.settings.openai_temperature if self.provider == "openai" else temperature
         full_messages = [{"role": "system", "content": system_prompt}, *messages]
         inline_system_messages = self._inline_system_prompt(system_prompt, messages)
 
@@ -379,7 +427,7 @@ class LLMService:
             return self._call_chat_completions(
                 model_name=model_name,
                 messages=inline_system_messages,
-                temperature=temperature,
+                temperature=request_temperature,
             )
 
         if not self._should_use_responses_api():
@@ -388,14 +436,17 @@ class LLMService:
                 warning_label=warning_label,
                 full_messages=full_messages,
                 inline_system_messages=inline_system_messages,
-                temperature=temperature,
+                temperature=request_temperature,
             )
 
         try:
-            response = self.client.responses.create(
-                model=model_name,
-                input=full_messages,
-            )
+            response_kwargs: dict[str, object] = {
+                "model": model_name,
+                "input": full_messages,
+                "max_output_tokens": self.settings.openai_max_output_tokens,
+                "temperature": request_temperature,
+            }
+            response = self.client.responses.create(**response_kwargs)
             output_text = getattr(response, "output_text", "").strip()
             if output_text:
                 return output_text
@@ -416,7 +467,7 @@ class LLMService:
                 return self._call_chat_completions(
                     model_name=model_name,
                     messages=inline_system_messages,
-                    temperature=temperature,
+                    temperature=request_temperature,
                 )
 
         return self._call_chat_with_compatibility(
@@ -424,7 +475,7 @@ class LLMService:
             warning_label=warning_label,
             full_messages=full_messages,
             inline_system_messages=inline_system_messages,
-            temperature=temperature,
+            temperature=request_temperature,
         )
 
     def _fallback_answer(
@@ -435,6 +486,10 @@ class LLMService:
         reason: Exception | None = None,
     ) -> str:
         """Return an honest fallback when no municipal LLM is active."""
+
+        provider_message = self._provider_error_message(reason)
+        if provider_message and chunks:
+            return provider_message
 
         memory_limited_ollama = (
             reason is not None
@@ -449,7 +504,6 @@ class LLMService:
                     source += f", Articulo {best.article_label} (Art. {best.article_label})"
                 elif best.section_title:
                     source += f", {best.section_title}"
-                source += f", Estado: {best.vigencia.upper()}"
                 return (
                     "Los modelos gratuitos estan temporalmente saturados, asi que no pude hacer una "
                     "explicacion con IA en este momento.\n\n"
@@ -465,30 +519,34 @@ class LLMService:
             normalized_question = question.lower()
             if any(term in normalized_question for term in ("cuanto cuesta", "costo", "monto", "pago")):
                 return (
-                    "No cuento con el costo exacto actualizado en la base documental. "
-                    "Este dato debe verificarse en el TUPA vigente o con el area responsable "
+                    "Por ahora no encontré el costo exacto actualizado en los documentos cargados. "
+                    "⚠️ Ese monto debe verificarse en el TUPA vigente o con el área municipal responsable "
                     "antes de realizar el pago."
                 )
             if any(term in normalized_question for term in ("ubicacion", "zona", "jr.", "jiron", "avenida")):
                 return (
-                    "No cuento con informacion suficiente para confirmar esa ubicacion. "
-                    "Valida el punto exacto con el area municipal competente y el plano vigente "
-                    "de zonas autorizadas o restringidas."
+                    "Por ahora no tengo información suficiente para confirmar esa ubicación. "
+                    "Para orientarte mejor, dime la avenida, calle o referencia exacta; luego conviene "
+                    "validarlo con el área municipal competente y el plano vigente."
                 )
             return (
-                "No encontre informacion suficiente con respaldo documental verificado para "
-                "responder con seguridad esa consulta. Te recomiendo verificarlo con la Gerencia de "
-                "Turismo y Desarrollo Economico o el area municipal competente."
+                "Por ahora no encontré información suficiente en los documentos cargados para responderte "
+                "con seguridad. Te recomiendo validarlo con el área municipal correspondiente."
             )
 
         # Produce una respuesta clara y paraphraseada del fragmento recuperado
         best = chunks[0]
+        if best.tipo_contenido == "definicion":
+            return self._fallback_definition_answer(best)
+
+        if best.document_id == "requisitos_comercio_ambulatorio":
+            return self._fallback_requirement_answer(question, best, chunks)
+
         source = best.fuente or best.source_title
         if best.article_label and not best.fuente:
             source += f" - Art. {best.article_label}"
         elif best.section_title and not best.fuente:
             source += f" - {best.section_title}"
-        source += f" - Estado: {best.vigencia.upper()}"
 
         # Simple heuristic para resumir: tomar oraciones principales del fragmento
         raw = " ".join(best.text.split()).strip()
@@ -502,16 +560,38 @@ class LLMService:
         summary = ". ".join(summary_sentences).rstrip()
         if not summary.endswith('.'):
             summary += '.'
+        extra_summaries: list[str] = []
+        for extra in chunks[1:3]:
+            if extra.chunk_id == best.chunk_id:
+                continue
+            extra_raw = " ".join(extra.text.split()).strip()
+            if not extra_raw:
+                continue
+            extra_safe = re.sub(r"(?<=\d)\.(?=\d)", "__DECIMAL__", extra_raw.replace("S/.", "S/"))
+            extra_sentences = [
+                sentence.strip().replace("__DECIMAL__", ".")
+                for sentence in extra_safe.replace('"', '').split(".")
+                if sentence.strip()
+            ]
+            if extra_sentences:
+                extra_summaries.append(". ".join(extra_sentences[:3]))
+        if extra_summaries:
+            summary = f"{summary} Tambien encontre: {' '.join(extra_summaries)}."
 
         # Construir respuesta en lenguaje claro
         detail = (
             "Ollama no pudo cargar el modelo configurado por memoria insuficiente. "
             "Para desarrollo local usa OLLAMA_MODEL=qwen3.5:0.8b o libera memoria y vuelve a intentar."
             if memory_limited_ollama
-            else "Si quieres una explicación más detallada y en lenguaje sencillo, activa el modo LLM externo."
+            else "Te dejo esta orientación con la evidencia disponible."
         )
+        if reason is not None and not memory_limited_ollama:
+            detail = (
+                "No pude usar el proveedor LLM configurado en este momento; "
+                "te dejo la evidencia recuperada por el RAG."
+            )
         paraphrased = (
-            f"Esto es lo que encontre en la base documental: {summary}\n\n"
+            f"Claro, te explico con lo que encontré en la base documental: {summary}\n\n"
             f"📌 Fuente: {source}\n\n"
             f"{detail}"
         )
@@ -521,6 +601,83 @@ class LLMService:
                 "porque la fuente esta pendiente de validacion."
             )
         return paraphrased
+
+    def _fallback_requirement_answer(
+        self,
+        question: str,
+        best: RetrievedChunk,
+        chunks: list[RetrievedChunk],
+    ) -> str:
+        """Render structured requirement evidence plainly when no LLM is active."""
+
+        tipo_tramite = str(best.metadata.get("tipo_tramite", ""))
+        normalized_question = question.lower()
+        simple_explanation = _extract_plain_section(best.text, "Version simple:", "No confundir:")
+        if simple_explanation and (
+            len(normalized_question.split()) <= 5
+            or any(marker in normalized_question for marker in ("q ", " pa ", "hijito", "desayuno"))
+        ):
+            source = best.fuente or best.source_title
+            return f"Claro 😊 {simple_explanation}\n\nFuente: {source}"
+
+        requisitos = _extract_bulleted_section(best.text, "Requisitos:", "Explicacion ciudadana:")
+        source = best.fuente or best.source_title
+        cost_requested = any(chunk.tipo_contenido == "costo" for chunk in chunks)
+
+        if tipo_tramite == "renovacion":
+            intro = "Claro 😊 Para renovar tu permiso de comercio ambulatorio, necesitas:"
+        else:
+            intro = "Claro 😊 Para sacar tu permiso de comercio ambulatorio por primera vez, necesitas:"
+
+        lines = [intro, ""]
+        for index, requisito in enumerate(requisitos, start=1):
+            lines.append(f"{index}. {requisito}")
+
+        if tipo_tramite != "renovacion":
+            lines.extend(
+                [
+                    "",
+                    "Ademas, la municipalidad revisara si el lugar y el giro son adecuados.",
+                ]
+            )
+        if cost_requested:
+            lines.extend(
+                [
+                    "",
+                    "Sobre el costo exacto, debe validarse con el TUPA vigente.",
+                ]
+            )
+        lines.extend(["", f"Fuente: {source}"])
+        return "\n".join(lines).strip()
+
+    def _fallback_definition_answer(self, best: RetrievedChunk) -> str:
+        """Render a concise definition without jumping ahead to procedures."""
+
+        definition = _extract_plain_section(
+            best.text,
+            "Definicion ciudadana:",
+            "Pregunta orientadora:",
+        )
+        follow_up = _extract_plain_section(best.text, "Pregunta orientadora:", "")
+        if not definition:
+            raw = " ".join(best.text.split()).strip()
+            definition = re.sub(r"^(Articulo\s+\d+\.?\s*)", "", raw, flags=re.IGNORECASE)
+        if follow_up:
+            follow_up = _naturalize_definition_follow_up(follow_up)
+            follow_up = follow_up.strip()
+            if "¿" not in follow_up and not follow_up.startswith("¿"):
+                follow_up = f"¿{follow_up}"
+            if not follow_up.endswith("?"):
+                follow_up = f"{follow_up}?"
+        else:
+            follow_up = _default_definition_follow_up(best)
+
+        source = best.fuente or best.source_title
+        parts = [definition]
+        if follow_up:
+            parts.extend(["", follow_up])
+        parts.extend(["", f"Fuente: {source}"])
+        return "\n".join(part for part in parts if part is not None).strip()
 
     def _ensure_normative_citation(self, answer: str, chunks: list[RetrievedChunk]) -> str:
         """Append a retrieved legal source if a generated municipal answer omitted citation."""
@@ -537,10 +694,9 @@ class LLMService:
             source += f" - Articulo {primary.article_label}"
         elif primary.section_title and not primary.fuente:
             source += f" - {primary.section_title}"
-        source += f" - Estado: {primary.vigencia.upper()}"
         rendered = answer.rstrip()
         if "fuente:" not in answer.lower():
-            rendered += f"\n\n[Fuente: {source}]"
+            rendered += f"\n\nFuente: {source}"
         if primary.requires_review and "pendiente de validacion" not in answer.lower():
             rendered += (
                 "\n\nInformacion orientativa pendiente de validacion; "
@@ -557,6 +713,16 @@ class LLMService:
         """Remove two unsafe overstatements that small local models may introduce."""
 
         guarded = re.sub(r"\bTUPA\s*\([^)]*\)", "TUPA", answer, flags=re.IGNORECASE)
+        guarded = re.sub(
+            r"(?is)^\s*(?:hola[!.]?\s*)?(?:soy\s+pachabot[,.]?\s*)+",
+            "",
+            guarded,
+        ).lstrip()
+        guarded = re.sub(
+            r"(?is)^\s*hola[!.]?\s*(?:soy\s+pachabot[,.]?\s*)?\n+",
+            "",
+            guarded,
+        ).lstrip()
         normalized_question = question.lower()
         supports_miguel_grau_segment = any(
             chunk.article_label == "17.4"
@@ -593,10 +759,38 @@ class LLMService:
             return "llm_no_evidence"
         return "llm"
 
+    def _provider_error_message(self, reason: Exception | None = None) -> str | None:
+        """Map provider configuration/runtime failures to citizen-friendly messages."""
+
+        if self._inactive_reason:
+            return self._inactive_reason
+        if reason is None:
+            return None
+
+        message = str(reason).lower()
+        if OLLAMA_DISABLED_MESSAGE.lower() in message:
+            return OLLAMA_DISABLED_MESSAGE
+        if self.provider == "openai":
+            if "api key" in message or "authentication" in message or "401" in message:
+                return OPENAI_API_KEY_MISSING_MESSAGE
+            if any(term in message for term in ("connection error", "unsupportedprotocol", "unsupported protocol")):
+                return OPENAI_CONNECTION_MESSAGE
+            if any(term in message for term in ("insufficient_quota", "quota", "billing", "429")):
+                return OPENAI_QUOTA_MESSAGE
+            if any(
+                term in message
+                for term in ("model_not_found", "model not found", "does not exist", "not available", "404")
+            ):
+                return OPENAI_MODEL_UNAVAILABLE_MESSAGE
+        return None
+
     def _fallback_general_answer(self, question: str, *, reason: Exception | None = None) -> str:
         """Return a simple and honest message for general chat without an active LLM."""
 
         _ = question
+        provider_message = self._provider_error_message(reason)
+        if provider_message:
+            return provider_message
         if reason is not None and self._should_try_next_model(reason):
             return (
                 "Los modelos gratuitos estan temporalmente saturados en este momento. "
@@ -646,12 +840,12 @@ class LLMService:
             return client_kwargs
 
         if self.provider == "openai" and self.settings.openai_api_key:
+            base_url = (self.settings.openai_base_url or "").strip() or "https://api.openai.com/v1"
             client_kwargs: dict[str, object] = {
                 "api_key": self.settings.openai_api_key,
+                "base_url": base_url,
                 "max_retries": 0,
             }
-            if self.settings.openai_base_url:
-                client_kwargs["base_url"] = self.settings.openai_base_url
             return client_kwargs
 
         return None
@@ -687,11 +881,15 @@ class LLMService:
     ) -> str:
         """Call the chat completions endpoint with a prepared message list."""
 
-        completion = self.client.chat.completions.create(
-            model=model_name,
-            messages=messages,
-            temperature=temperature,
-        )
+        request_kwargs: dict[str, object] = {
+            "model": model_name,
+            "messages": messages,
+            "temperature": temperature,
+        }
+        if self.provider == "openai":
+            request_kwargs["max_tokens"] = self.settings.openai_max_output_tokens
+
+        completion = self.client.chat.completions.create(**request_kwargs)
         return completion.choices[0].message.content.strip()
 
     def _should_use_responses_api(self) -> bool:
@@ -734,7 +932,10 @@ class LLMService:
     def _candidate_models(self) -> list[str]:
         """Return the ordered list of primary and fallback models to try."""
 
-        models = [self.settings.chat_model, *self.settings.chat_model_fallbacks]
+        if self.provider == "openai":
+            models = [self.settings.openai_model]
+        else:
+            models = [self.settings.chat_model, *self.settings.chat_model_fallbacks]
         ordered: list[str] = []
         seen: set[str] = set()
         for model_name in models:
@@ -859,5 +1060,68 @@ class LLMService:
                 "no endpoints found",
                 "developer instruction is not enabled",
                 "system instruction is not enabled",
+                "connection error",
+                "unsupportedprotocol",
+                "unsupported protocol",
             )
         )
+
+
+def _extract_bulleted_section(text: str, start_marker: str, end_marker: str) -> list[str]:
+    """Extract simple dash-list items from a rendered evidence section."""
+
+    start = text.find(start_marker)
+    if start < 0:
+        return []
+    start += len(start_marker)
+    end = text.find(end_marker, start)
+    section = text[start:] if end < 0 else text[start:end]
+    items: list[str] = []
+    for line in section.splitlines():
+        cleaned = line.strip()
+        if not cleaned.startswith("-"):
+            continue
+        cleaned = cleaned.lstrip("-").strip()
+        if cleaned:
+            items.append(cleaned.rstrip("."))
+    return items
+
+
+def _extract_plain_section(text: str, start_marker: str, end_marker: str) -> str:
+    start = text.find(start_marker)
+    if start < 0:
+        return ""
+    start += len(start_marker)
+    end = text.find(end_marker, start) if end_marker else -1
+    section = text[start:] if end < 0 else text[start:end]
+    return re.sub(r"\s+", " ", section).strip()
+
+
+def _default_definition_follow_up(best: RetrievedChunk) -> str:
+    normalized = f"{best.section_title} {best.text}".lower()
+    if "padron" in normalized or "padrón" in normalized:
+        return "¿Quieres que te explique cómo se ingresa al padrón o qué documentos se presentan?"
+    if "tupa" in normalized:
+        return "¿Quieres que te explique qué parte del trámite depende del TUPA?"
+    if "sisa" in normalized:
+        return "¿Quieres que te explique cuándo corresponde pagar SISA?"
+    if "modulo" in normalized or "módulo" in normalized or "puesto" in normalized:
+        return "¿Quieres que te explique qué condiciones debe cumplir el módulo o en qué zonas puede ubicarse?"
+    if "giro" in normalized or "rubro" in normalized:
+        return "¿Quieres que te explique qué giros o rubros aparecen como permitidos?"
+    return "¿Quieres que te explique cómo sacar el permiso, qué requisitos necesitas o en qué zonas se puede vender?"
+
+
+def _naturalize_definition_follow_up(follow_up: str) -> str:
+    normalized = " ".join(follow_up.strip().strip("¿?").split()).lower()
+    if (
+        "como sacar el permiso" in normalized
+        and "requisitos" in normalized
+        and "zonas" in normalized
+    ):
+        return (
+            "Podemos seguir por partes: te puedo explicar cómo sacar el permiso, "
+            "qué documentos necesitas, cómo renovar si ya tienes autorización o "
+            "en qué zonas no se puede vender. ¿Qué te gustaría revisar?"
+        )
+    return follow_up

@@ -1,0 +1,29 @@
+{
+  "id": "zonas_restringidas_comercio_ambulatorio",
+  "nombre": "Zonas restringidas para comercio ambulatorio",
+  "descripcion": "Fuente estructurada editable para orientar consultas ciudadanas sobre zonas rigidas o prohibidas.",
+  "zonas": [
+    {
+      "id": "jr_miguel_grau_tramo_malasquez_manchay",
+      "ubicacion": "Jr. Miguel Grau, tramo comprendido entre Av. Victor Malasquez y Av. Manchay.",
+      "restriccion": "Zona rigida y/o prohibida para el ejercicio del comercio ambulatorio segun la fuente cargada.",
+      "articulo": "17.4",
+      "fuente": "Ordenanza 227-2019-MDP/C, Articulo 17.4",
+      "vigencia": "vigente_con_observacion",
+      "requires_review": true,
+      "nota": "La ubicacion exacta debe validarse con el plano vigente y el area municipal competente."
+    },
+    {
+      "id": "av_manchay_cuadras_7_8",
+      "ubicacion": "Av. Manchay, tramo entre las cuadras 7 y 8, entre Av. 1 de Mayo y Calle 57.",
+      "restriccion": "Zona rigida y/o prohibida para el ejercicio del comercio ambulatorio segun la fuente cargada.",
+      "articulo": "17.4",
+      "fuente": "Ordenanza 227-2019-MDP/C, Articulo 17.4",
+      "vigencia": "vigente_con_observacion",
+      "requires_review": true,
+      "nota": "La ubicacion exacta debe validarse con el plano vigente y el area municipal competente."
+    }
+  ],
+  "estado_revision": "borrador_editable",
+  "requiere_validacion_humana": true
+}

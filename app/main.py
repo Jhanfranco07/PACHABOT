@@ -23,7 +23,7 @@ from app.memory.conversation_store import ConversationMemoryStore
 from app.services.assistant_service import AssistantService
 from app.services.document_service import DocumentService
 from app.services.evidence_service import EvidenceService
-from app.services.llm_service import LLMService
+from app.services.llm_service import LLMService, OLLAMA_DISABLED_MESSAGE
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
 from app.services.retrieval_service import RetrievalService
@@ -129,19 +129,46 @@ def info() -> dict[str, object]:
 
 @app.get("/ollama/config", response_model=OllamaRuntimeConfigResponse)
 def ollama_config() -> OllamaRuntimeConfigResponse:
-    """Return available Ollama models and active in-memory generation options."""
+    """Return active LLM runtime options for the web simulator.
+
+    The route name is kept for backwards compatibility with the existing
+    simulator, but it must not touch Ollama unless Ollama is the active provider.
+    """
 
     settings = container.settings
-    if settings.llm_provider.lower().strip() != "ollama":
+    provider = settings.llm_provider.lower().strip() or "openai"
+    if provider == "openai":
         return OllamaRuntimeConfigResponse(
-            provider=settings.llm_provider,
-            available=False,
-            models=[],
+            provider="openai",
+            available=bool(settings.openai_api_key) and container.llm_service.client is not None,
+            models=[settings.openai_model],
+            active_model=settings.openai_model,
+            think=False,
+            temperature=settings.openai_temperature,
+            max_tokens=settings.openai_max_output_tokens,
+            message="Proveedor activo: OpenAI. Ollama no se consulta ni se inicia.",
+        )
+    if provider != "ollama":
+        return OllamaRuntimeConfigResponse(
+            provider=provider,
+            available=container.llm_service.client is not None,
+            models=[settings.chat_model],
             active_model=settings.chat_model,
             think=False,
-            temperature=0.0,
-            max_tokens=0,
-            message="Configura LLM_PROVIDER=ollama para usar el selector local.",
+            temperature=0.2,
+            max_tokens=settings.openai_max_output_tokens,
+            message="Ollama no se consulta porque el proveedor activo no es ollama.",
+        )
+    if not settings.ollama_enabled:
+        return OllamaRuntimeConfigResponse(
+            provider="ollama",
+            available=False,
+            models=[],
+            active_model=settings.ollama_model,
+            think=settings.ollama_think,
+            temperature=settings.ollama_temperature,
+            max_tokens=settings.ollama_max_tokens,
+            message=OLLAMA_DISABLED_MESSAGE,
         )
     try:
         models = container.llm_service.list_ollama_models()
@@ -171,6 +198,15 @@ def ollama_config() -> OllamaRuntimeConfigResponse:
 def update_ollama_config(payload: OllamaRuntimeConfigRequest) -> OllamaRuntimeConfigResponse:
     """Apply local simulator generation settings until the API process stops."""
 
+    provider = container.settings.llm_provider.lower().strip() or "openai"
+    if provider == "openai":
+        container.settings.openai_model = payload.model
+        container.settings.openai_temperature = payload.temperature
+        container.settings.openai_max_output_tokens = payload.max_tokens
+        return ollama_config()
+    if provider != "ollama":
+        return ollama_config()
+
     try:
         container.llm_service.configure_ollama_runtime(
             model=payload.model,
@@ -199,11 +235,14 @@ def chat(payload: ChatRequest) -> ChatResponse:
             metadata=payload.metadata,
         )
     )
-    model_used = (
-        container.settings.ollama_model
-        if result.used_llm and container.settings.llm_provider.lower().strip() == "ollama"
-        else ""
-    )
+    provider = container.settings.llm_provider.lower().strip()
+    model_used = ""
+    if result.used_llm and provider == "ollama":
+        model_used = container.settings.ollama_model
+    elif result.used_llm and provider == "openai":
+        model_used = container.settings.openai_model
+    elif result.used_llm:
+        model_used = container.settings.chat_model
     return ChatResponse(
         answer=result.answer,
         sources=result.sources,

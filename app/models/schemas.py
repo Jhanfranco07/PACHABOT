@@ -93,6 +93,7 @@ class EvidenceAssessment:
     sufficient: bool
     confidence_level: str
     warning: str = ""
+    old_warning: str = ""
     items: list[EvidenceItem] = field(default_factory=list)
 
 

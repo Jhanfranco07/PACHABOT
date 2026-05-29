@@ -89,33 +89,13 @@
   "requisitos": [
     {
       "orden": 1,
-      "descripcion": "Ser comerciante regulado.",
-      "detalle": "La persona debe estar inscrita en el Padrón Municipal de Comerciantes que desarrollan Actividades Comerciales en la Vía Pública.",
-      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
-      "obligatorio": true
-    },
-    {
-      "orden": 2,
-      "descripcion": "Presentar solicitud con carácter de declaración jurada.",
-      "detalle": "La solicitud debe realizarse de acuerdo con el formato gratuito establecido por la municipalidad para este procedimiento.",
-      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
-      "obligatorio": true
-    },
-    {
-      "orden": 3,
-      "descripcion": "Adjuntar dos fotografías tamaño carné.",
-      "detalle": "Las fotografías deben corresponder al solicitante.",
-      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
-      "obligatorio": true
-    },
-    {
-      "orden": 4,
-      "descripcion": "Indicar el número de comprobante de pago por derecho TUPA.",
-      "detalle": "El monto exacto debe verificarse en el TUPA vigente de la municipalidad.",
-      "fuente": "Ordenanza N° 227-2019-MDP/C, Artículo 30",
+      "descripcion": "Los requisitos operativos se atienden de forma diferenciada: trámite nuevo / ingreso al padrón municipal y renovación.",
+      "detalle": "Para evitar mezclar documentos de solicitud nueva con documentos de renovación, la fuente principal de requisitos es data/tramites/requisitos_comercio_ambulatorio.json.",
+      "fuente": "Ficha interna de requisitos de comercio ambulatorio",
       "obligatorio": true
     }
   ],
+  "requisitos_diferenciados_archivo": "data/tramites/requisitos_comercio_ambulatorio.json",
   "requisitos_para_ingresar_al_padron": [
     {
       "orden": 1,

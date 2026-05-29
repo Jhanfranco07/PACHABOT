@@ -1,10 +1,16 @@
-# PACHABOT - Asistente Inteligente para Orientacion Ciudadana
+# PACHABOT - Asistente Virtual Inteligente Conversacional Municipal
 
-Prototipo local en Python de un asistente conversacional para orientacion ciudadana en tramites municipales, enfocado inicialmente en comercio ambulatorio de la Municipalidad Distrital de Pachacamac. La ficha de tramite cargada identifica como area responsable a la Gerencia de Turismo y Desarrollo Economico / subgerencia competente; esta denominacion debe validarse institucionalmente antes de publicacion. Funciona en Telegram, consola y simulador web.
+PachaBot es un Asistente Virtual Inteligente Conversacional disenado para orientar a ciudadanos y emprendedores en tramites municipales. Utiliza modelos de lenguaje, recuperacion aumentada por generacion (RAG), memoria conversacional y consulta de fuentes documentales oficiales para entregar respuestas claras, trazables y sustentadas.
+
+El proyecto esta enfocado inicialmente en comercio ambulatorio de la Municipalidad Distrital de Pachacamac. La ficha de tramite cargada identifica como area responsable a la Gerencia de Turismo y Desarrollo Economico / subgerencia competente; esta denominacion debe validarse institucionalmente antes de publicacion.
+
+Funciona localmente en Telegram, consola, FastAPI y simulador web, y su arquitectura queda preparada para integrar herramientas especializadas mediante MCP.
 
 ## Objetivo
 
-El proyecto responde consultas normativas e informativas usando como base principal:
+El proyecto no busca ser un chatbot basico de preguntas frecuentes. Busca orientar conversacionalmente al ciudadano: interpreta su consulta, identifica la intencion, usa memoria si hay seguimiento, recupera evidencia documental, valida si la informacion alcanza, genera una respuesta clara y advierte limites cuando corresponde.
+
+Fuentes normativas principales:
 
 - Ordenanza 108-2012-MDP/C
 - Ordenanza 227-2019-MDP/C
@@ -17,34 +23,128 @@ Prioridades del prototipo:
 - citar ordenanza y articulo cuando sea posible
 - permitir preguntas libres y preguntas de seguimiento
 - seguir funcionando incluso si el LLM externo no esta disponible
+- preparar una futura integracion MCP con herramientas municipales especializadas
 
-## Arquitectura actual
+## Diferencia entre chatbot basico y PachaBot
 
-El proyecto ya no es solo un bot con busqueda simple. Ahora tiene estas capas:
+Un chatbot basico suele responder con reglas, menus o preguntas frecuentes fijas. PachaBot funciona como asistente conversacional porque:
+
+- interpreta la intencion del ciudadano, por ejemplo requisitos, costos, zonas, sanciones o normativa;
+- usa memoria para entender repreguntas como "y cuanto cuesta?" o "y si es en Manchay?";
+- decide que fuente consultar: fichas de tramite, FAQ, chunks normativos, norma consolidada o fuentes estructuradas;
+- recupera evidencia con metadatos, score, tipo de fuente y vigencia;
+- valida si la evidencia es suficiente antes de generar una respuesta;
+- evita inventar cuando falta respaldo documental;
+- deriva al area municipal competente cuando la consulta requiere verificacion humana;
+- deja trazabilidad para debug y futura auditoria;
+- esta preparado para conectar herramientas externas mediante MCP.
+
+## Arquitectura conversacional inteligente
+
+El proyecto esta organizado como un agente conversacional con recuperacion documental local:
 
 - `channels/`: adapta Telegram al formato interno del asistente
-- `memory/`: guarda el historial reciente por chat
+- `memory/`: guarda historial, modo, ultima intencion, fuentes usadas y advertencias
 - `tools/`: concentra herramientas documentales para reescribir consultas y recuperar evidencia
-- `services/`: contiene el orquestador, el router, la recuperacion y la capa LLM
+- `services/`: contiene el orquestador inteligente, router, rewriter, retrieval, evidencia y LLM
 - `api/`: expone un endpoint HTTP para probar el asistente fuera de Telegram
 
-## Flujo de consulta
+Flujo:
 
 ```text
-Mensaje del ciudadano
-  -> normalizacion y deteccion de intencion
-  -> reescritura si es una pregunta de seguimiento
-  -> retrieval local: tramites -> FAQ -> chunks -> norma consolidada
-  -> evaluacion de evidencia y nivel de confianza
-  -> Ollama solo si existe evidencia suficiente
-  -> respuesta ciudadana breve con fuentes
-  -> historial y, opcionalmente, traza de depuracion
+Entrada del usuario
+  -> canal Telegram/web/consola
+  -> normalizacion
+  -> router de intencion
+  -> memoria conversacional
+  -> reformulacion de consulta
+  -> recuperacion documental
+  -> validacion de evidencia
+  -> generacion con LLM
+  -> respuesta con fuente o advertencia
+  -> registro en historial/debug
 ```
 
 `EvidenceService` conserva para cada soporte utilizado el tipo de fuente, score,
 extracto base y advertencias de revision. Si no existe soporte suficiente, el
 LLM no recibe contexto para improvisar: el sistema responde con un fallback
 controlado y deriva al area municipal competente.
+
+## Por que PachaBot no debe funcionar con respuestas quemadas
+
+Las respuestas fijas sirven para menus simples, pero no para orientacion municipal conversacional. Una misma duda ciudadana puede escribirse como "permiso", "autorizacion", "quiero vender", "puesto", "stand", "no cumplo" o "me pueden quitar mi modulo". Por eso PachaBot no debe crecer agregando respuestas pegadas en codigo.
+
+El flujo correcto es:
+
+- detectar una intencion general, sin imponer una respuesta;
+- reconstruir la consulta si depende del historial;
+- ampliar la busqueda con terminos relacionados;
+- recuperar evidencia desde tramites, FAQ, chunks, norma consolidada y JSON estructurados;
+- validar si la evidencia alcanza;
+- pedir al LLM que explique la evidencia en lenguaje ciudadano;
+- usar fallback solo cuando realmente no haya respaldo suficiente.
+
+## Recuperacion antes del fallback
+
+Antes de decir que no encontro informacion suficiente, PachaBot intenta varias busquedas:
+
+- consulta original del ciudadano;
+- consulta reformulada con memoria conversacional;
+- consulta expandida por sinonimos municipales;
+- busqueda por intencion, por ejemplo obligaciones, sanciones, zonas, ferias o requisitos;
+- busqueda en fuentes estructuradas como tramites, FAQ y zonas restringidas;
+- busqueda en chunks normativos y norma consolidada.
+
+Ejemplos de expansion:
+
+- "no cumple" se relaciona con incumplimiento, sancion, revocacion, retiro y fiscalizacion;
+- "puesto" se relaciona con modulo, stand, mobiliario y espacio autorizado;
+- "permiso" se relaciona con autorizacion municipal y resolucion;
+- "zona prohibida" se relaciona con zona rigida, zona restringida y ubicacion no autorizada;
+- "feria" se relaciona con feriante, recinto ferial, stand y autorizacion de feria.
+
+El fallback se mantiene por seguridad, pero queda como ultimo recurso. Si existe evidencia parcial, el asistente responde lo que si esta respaldado y aclara que parte debe validarse.
+
+## Requisitos diferenciados de comercio ambulatorio
+
+PachaBot separa los requisitos de comercio ambulatorio en dos casos para no
+mezclar documentos:
+
+- tramite nuevo / ingreso al padron municipal: aplica cuando la persona quiere
+  vender por primera vez, inscribirse o pedir permiso para vender en la via
+  publica.
+- renovacion: aplica cuando la persona ya tiene autorizacion, su permiso esta
+  por vencer o quiere seguir vendiendo con autorizacion municipal.
+
+La fuente principal de esta separacion es
+`data/tramites/requisitos_comercio_ambulatorio.json`. La ordenanza funciona como
+respaldo normativo general, pero la orientacion ciudadana prioriza la ficha
+interna diferenciada.
+
+Reglas de respuesta:
+
+- si el ciudadano pide permiso por primera vez, el asistente usa la seccion
+  `nuevo_ingreso_padron`;
+- si pregunta por renovar, usa la seccion `renovacion`;
+- si no queda claro, pregunta si es primera vez o renovacion;
+- no mezcla fotos carne o voucher como requisitos principales del tramite nuevo;
+- no inventa costos: el monto exacto se valida con el TUPA vigente;
+- cita la fuente al final de forma breve, sin mostrar estados internos ni
+  metadatos del RAG.
+
+## Preparacion futura para MCP
+
+MCP permitira conectar este asistente conversacional con herramientas externas o internas sin cambiar la arquitectura principal. Posibles herramientas:
+
+- consulta de requisitos estructurados por tramite;
+- consulta de costos o TUPA vigente;
+- busqueda normativa con filtros por articulo y vigencia;
+- validacion de zonas restringidas mediante plano o base georreferenciada;
+- consulta de expedientes, si existiera autorizacion futura;
+- conexion con bases internas o APIs simuladas para evaluacion academica;
+- exposicion de recursos documentales para panel administrativo o auditoria.
+
+Por ahora, estas integraciones no son obligatorias: PachaBot funciona con OpenAI API como proveedor principal, conserva Ollama como alternativa local opcional y mantiene el RAG sobre archivos JSON/TXT.
 
 ## Decision tecnica del RAG
 
@@ -122,7 +222,9 @@ project_root/
 |   |-- processed/
 |   |   `-- chunks.json
 |   |-- tramites/
-|   |   `-- comercio_ambulatorio.json
+|   |   |-- comercio_ambulatorio.json
+|   |   |-- zonas_restringidas_comercio_ambulatorio.json
+|   |   `-- ordenanza_227_articulos_57_64.json
 |   |-- faq/
 |   |   `-- comercio_ambulatorio_faq.json
 |   |-- vectorstore/
@@ -179,32 +281,21 @@ Copy-Item .env.example .env
 Completa al menos:
 
 - `TELEGRAM_BOT_TOKEN`
-- `LLM_PROVIDER`
+- `OPENAI_API_KEY`
 
-Opcion recomendada para pruebas locales con Ollama, sin API key:
+Por defecto PachaBot usa OpenAI API:
 
-- `LLM_PROVIDER=ollama`
-- `OLLAMA_BASE_URL=http://localhost:11434`
-- `OLLAMA_MODEL=qwen3.5:4b`
-- `OLLAMA_TIMEOUT=120`
-- `OLLAMA_THINK=false`
-- `OLLAMA_TEMPERATURE=0.2`
-- `OLLAMA_MAX_TOKENS=400`
-- `OLLAMA_KEEP_ALIVE=5m`
+- `LLM_PROVIDER=openai`
+- `OPENAI_API_KEY=tu_api_key`
+- `OPENAI_MODEL=gpt-5.4-mini`
+- `OPENAI_MAX_OUTPUT_TOKENS=500`
+- `OPENAI_TEMPERATURE=0.2`
 - `LLM_MODE=auto`
 
-Confirma que el modelo local esta disponible antes de iniciar el bot:
-
-```powershell
-ollama list
-Invoke-RestMethod http://localhost:11434/api/tags
-```
-
-Tambien puedes usar proveedores remotos:
+Tambien puedes usar proveedores remotos compatibles:
 
 - `LLM_PROVIDER=openrouter` con `OPENROUTER_API_KEY` y `CHAT_MODEL`
-- `LLM_PROVIDER=groq`
-- `GROQ_API_KEY`
+- `LLM_PROVIDER=groq` con `GROQ_API_KEY`
 - `GROQ_BASE_URL=https://api.groq.com/openai/v1`
 
 Si vas a usar xAI/Grok:
@@ -212,10 +303,48 @@ Si vas a usar xAI/Grok:
 - `GROK_API_KEY`
 - `GROK_BASE_URL=https://api.x.ai/v1`
 
-Si todavia no tienes un LLM operativo, puedes dejar:
+Si todavia no tienes un LLM operativo para pruebas de interfaz, puedes dejar:
 
 ```env
 LLM_MODE=mock
+```
+
+### Uso de OpenAI como proveedor principal y Ollama como opcion local
+
+PachaBot queda configurado para usar OpenAI API como proveedor principal. Ollama sigue disponible como alternativa local, pero esta apagado por defecto para evitar consumo de memoria y lentitud del equipo.
+
+Con OpenAI activo, el sistema no consulta `http://localhost:11434`, no lista modelos locales y no intenta iniciar Ollama:
+
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=tu_api_key
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MAX_OUTPUT_TOKENS=500
+OPENAI_TEMPERATURE=0.2
+OPENAI_BASE_URL=https://api.openai.com/v1
+OLLAMA_ENABLED=false
+```
+
+Para activar Ollama manualmente algun dia:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_ENABLED=true
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+```
+
+Antes de usarlo, inicia Ollama por tu cuenta y confirma que el modelo exista:
+
+```powershell
+ollama list
+```
+
+Para volver a OpenAI:
+
+```env
+LLM_PROVIDER=openai
+OLLAMA_ENABLED=false
 ```
 
 ## Variables principales
@@ -224,9 +353,16 @@ Ejemplo base:
 
 ```env
 TELEGRAM_BOT_TOKEN=
-LLM_PROVIDER=ollama
+LLM_PROVIDER=openai
+LLM_MODE=auto
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MAX_OUTPUT_TOKENS=500
+OPENAI_TEMPERATURE=0.2
+OPENAI_BASE_URL=https://api.openai.com/v1
+OLLAMA_ENABLED=false
+OLLAMA_MODEL=llama3.1
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3.5:4b
 OLLAMA_TIMEOUT=120
 OLLAMA_THINK=false
 OLLAMA_TEMPERATURE=0.2
@@ -240,15 +376,12 @@ GROK_API_KEY=
 GROK_BASE_URL=https://api.x.ai/v1
 GROQ_API_KEY=
 GROQ_BASE_URL=https://api.groq.com/openai/v1
-OPENAI_API_KEY=
-OPENAI_BASE_URL=
 APP_ENV=development
 LOG_LEVEL=INFO
 EMBEDDING_MODEL=local-tfidf
-CHAT_MODEL=mistralai/mistral-small-3.1-24b-instruct:free
-CHAT_MODEL_FALLBACKS=google/gemma-3-12b-it:free
+CHAT_MODEL=gpt-5.4-mini
+CHAT_MODEL_FALLBACKS=
 MODEL_RETRY_COOLDOWN_SECONDS=180
-LLM_MODE=auto
 RETRIEVAL_TOP_K=4
 RETRIEVAL_MIN_SCORE=0.35
 RETRIEVAL_MAX_RESULTS=5
@@ -263,7 +396,8 @@ RAG_DEBUG_TRACE=false
 
 Notas:
 
-- `ollama` usa la API local `POST /api/generate`; no requiere API key y queda encapsulado en `app/services/llm_service.py`.
+- `openai` es el proveedor principal por defecto y usa `OPENAI_MODEL`.
+- `ollama` usa la API local `POST /api/generate`; no requiere API key, pero solo se consulta si `LLM_PROVIDER=ollama` y `OLLAMA_ENABLED=true`.
 - `OLLAMA_THINK=false` evita razonamiento extenso en modelos Qwen para respuestas ciudadanas; si la ejecucion solo usa CPU, aumenta `OLLAMA_TIMEOUT` localmente.
 - `data/processed/` contiene artefactos de RAG; las conversaciones y modos nuevos se guardan en `data/runtime/`.
 - La aplicacion puede leer temporalmente sesiones antiguas en `data/processed/conversations/` y `data/processed/chat_modes/`.
@@ -309,14 +443,15 @@ python scripts/ingest_documents.py
 
 - Ordenanzas fuente: agrega texto extraido y revisado a `data/raw/`; conserva originales fuera del indice si aun requieren OCR o correccion.
 - Tramites: completa `data/tramites/comercio_ambulatorio.json` con datos validados por el area responsable y TUPA vigente.
+- Requisitos diferenciados: actualiza `data/tramites/requisitos_comercio_ambulatorio.json` cuando el area municipal cambie documentos para tramite nuevo o renovacion.
 - FAQ: edita `data/faq/comercio_ambulatorio_faq.json` manteniendo `fuentes` y marcas de revision.
 - Regeneracion: despues de cambiar ordenanzas, ejecuta `python scripts/ingest_documents.py`.
 
 No cargues un monto, plazo o restriccion como definitivo sin una fuente vigente.
 
-## Ejecutar el bot de Telegram
+## Ejecutar el canal Telegram
 
-Con la aplicacion de Ollama ejecutandose en Windows y un modelo instalado:
+Con `.env` configurado con OpenAI:
 
 ```powershell
 python run.py
@@ -332,7 +467,7 @@ Comandos disponibles en Telegram:
 ## Probar en consola de VS Code
 
 Para conversar con el asistente sin abrir Telegram, usa el canal local interactivo.
-Este canal utiliza el mismo RAG, memoria y proveedor Ollama que el bot.
+Este canal utiliza el mismo RAG, memoria y proveedor LLM configurado que el asistente.
 
 ```powershell
 .\.venv\Scripts\python.exe run_console.py
@@ -354,14 +489,14 @@ Comandos disponibles:
 - `/ayuda` - listar comandos.
 - `/salir` - terminar.
 
-Para ver fuentes, intent y si la respuesta uso Ollama:
+Para ver fuentes, intent y si la respuesta uso IA externa:
 
 ```powershell
 .\.venv\Scripts\python.exe run_console.py --debug
 ```
 
-Si aparece un error de memoria al cargar `qwen3.5:4b`, instala y selecciona el
-modelo liviano para desarrollo:
+Si decides activar Ollama y aparece un error de memoria al cargar un modelo local,
+instala y selecciona un modelo mas liviano para desarrollo:
 
 ```powershell
 ollama pull qwen3.5:0.8b
@@ -370,14 +505,16 @@ ollama pull qwen3.5:0.8b
 Luego cambia en `.env`:
 
 ```env
+LLM_PROVIDER=ollama
+OLLAMA_ENABLED=true
 OLLAMA_MODEL=qwen3.5:0.8b
 ```
 
-Conserva `qwen3.5:4b` para equipos con mas memoria disponible o pruebas de mayor calidad.
+Vuelve a `LLM_PROVIDER=openai` y `OLLAMA_ENABLED=false` si quieres evitar consumo local.
 
 ## Simulador web tipo chat
 
-Para probar el bot en una interfaz similar a mensajeria, sin abrir Telegram:
+Para probar el asistente en una interfaz similar a mensajeria, sin abrir Telegram:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
@@ -391,13 +528,14 @@ http://127.0.0.1:8000/simulator
 
 Desde la pantalla puedes:
 
-- elegir entre los modelos Ollama instalados, por ejemplo `qwen3.5:0.8b` o `qwen3.5:4b`;
-- usar `Veloz`, que envía `think=false` y es el recomendado para probar el bot;
+- conversar con OpenAI cuando `LLM_PROVIDER=openai`;
+- elegir entre modelos Ollama instalados solo si `LLM_PROVIDER=ollama` y `OLLAMA_ENABLED=true`;
+- usar `Veloz`, que envía `think=false` y es el recomendado para probar el asistente;
 - usar `Pensamiento`, que envía `think=true` y puede tardar bastante mas;
 - reiniciar la conversación conservando el mismo servidor local.
 
-La seleccion web es temporal: solo se mantiene mientras la API esta ejecutandose.
-Para Telegram, deja el modelo definitivo configurado en `.env`.
+La seleccion web de Ollama es temporal: solo se mantiene mientras la API esta ejecutandose.
+Para Telegram, deja el proveedor definitivo configurado en `.env`.
 
 ## Probar por HTTP
 
@@ -435,7 +573,11 @@ POST /chat
 
 ## Ejemplos de preguntas
 
-- `Que requisitos necesito para una autorizacion`
+- `Como saco mi permiso de comercio ambulatorio`
+- `Que necesito para vender`
+- `Como renuevo mi permiso`
+- `Requisitos de comercio ambulatorio`
+- `Que necesito y cuanto cuesta`
 - `Cuanto mide un modulo`
 - `Cuanto se paga de SISA`
 - `Que zonas son rigidas`
@@ -449,9 +591,9 @@ POST /chat
 - si la consulta es de seguimiento, intenta aprovechar el contexto del chat
 - si la evidencia es debil, responde con honestidad y evita inventar
 - las respuestas municipales solicitan brevedad y evitan agregar datos no preguntados
-- si no se recuperan chunks para un dato municipal, Ollama recibe la instruccion de indicar que no existe evidencia suficiente, sin inventar datos
+- si no se recupera evidencia para un dato municipal, el asistente responde con fallback controlado sin inventar datos
 - si la consulta esta fuera del dominio, limita la conversacion a comercio ambulatorio
-- si el LLM externo falla, el bot sigue respondiendo con un fallback local
+- si el LLM externo falla, el asistente sigue respondiendo con un fallback local
 
 ## Pruebas
 

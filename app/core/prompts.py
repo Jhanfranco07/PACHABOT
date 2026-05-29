@@ -69,6 +69,12 @@ def build_answer_messages(
 
     messages = _history_messages(history)
     context_block = build_context_block(chunks[:4])
+    conversational_guidance = build_conversational_guidance(question, chunks)
+    guidance_block = (
+        f"\n\nGUIA DE CONTINUIDAD CONVERSACIONAL:\n{conversational_guidance}\n"
+        if conversational_guidance
+        else ""
+    )
     messages.append(
         {
             "role": "user",
@@ -77,11 +83,120 @@ def build_answer_messages(
                 f"{context_block}\n\n"
                 "---\n\n"
                 f"{EVIDENCE_CHECK_PROMPT}\n\n"
+                f"{guidance_block}"
                 f"PREGUNTA DEL CIUDADANO: {question}\n\nRESPUESTA:"
             ),
         }
     )
     return messages
+
+
+def build_conversational_guidance(question: str, chunks: list[RetrievedChunk]) -> str:
+    """Suggest a useful next question without replacing RAG answer generation."""
+
+    normalized = _plain_text(
+        " ".join(
+            [
+                question,
+                *[
+                    " ".join(
+                        [
+                            chunk.tipo_contenido,
+                            chunk.section_title,
+                            chunk.article_label,
+                            chunk.text[:500],
+                            " ".join(chunk.user_intents),
+                        ]
+                    )
+                    for chunk in chunks[:4]
+                ],
+            ]
+        )
+    )
+
+    guidance = [
+        "Responde primero la pregunta con la evidencia recuperada. Si falta contexto, "
+        "cierra con una sola pregunta util para orientar el siguiente paso.",
+    ]
+
+    if any(term in normalized for term in ("que es", "que significa", "definicion", "a que se refiere")):
+        guidance.append(
+            "Si el ciudadano pidio una definicion, da solo el concepto en lenguaje sencillo "
+            "y ofrece opciones breves para continuar, sin pedir datos personales ni explicar "
+            "todo el tramite todavia."
+        )
+    elif any(term in normalized for term in ("giro", "giros", "rubro", "rubros", "actividad permitida")):
+        guidance.append(
+            "Si el caso trata de giro o rubro, pregunta que producto o servicio vende "
+            "exactamente, o si su autorizacion indica algun giro especifico."
+        )
+    elif any(
+        term in normalized
+        for term in (
+            "ubicacion",
+            "zona",
+            "zonas",
+            "calle",
+            "avenida",
+            "jr ",
+            "jiron",
+            "manchay",
+            "miguel grau",
+            "zona rigida",
+            "zona prohibida",
+        )
+    ):
+        guidance.append(
+            "Si el caso depende de ubicacion, pregunta la avenida, calle o referencia "
+            "exacta y si el punto esta en vereda, esquina, cruce peatonal, parque, "
+            "berma, paradero o cerca de una zona rigida."
+        )
+    elif any(term in normalized for term in ("renovar", "renovacion", "venc", "voucher")):
+        guidance.append(
+            "Si habla de renovacion o autorizacion vencida, pregunta si la autorizacion "
+            "ya vencio o sigue vigente, y hasta que fecha fue emitida si lo recuerda."
+        )
+    elif any(
+        term in normalized
+        for term in (
+            "permiso",
+            "autorizacion",
+            "requisito",
+            "documento",
+            "padron",
+            "vender en la via publica",
+            "vender en la calle",
+            "comercio ambulatorio",
+        )
+    ):
+        guidance.append(
+            "Si trata de venta en via publica o tramite, pregunta solo si ayuda: si es "
+            "solicitud nueva o renovacion, que producto desea vender y en que punto exacto."
+        )
+
+    return "\n".join(f"- {item}" for item in guidance)
+
+
+def _plain_text(text: str) -> str:
+    replacements = str.maketrans(
+        {
+            "á": "a",
+            "é": "e",
+            "í": "i",
+            "ó": "o",
+            "ú": "u",
+            "ü": "u",
+            "ñ": "n",
+            "Á": "a",
+            "É": "e",
+            "Í": "i",
+            "Ó": "o",
+            "Ú": "u",
+            "Ü": "u",
+            "Ñ": "n",
+        }
+    )
+    return " ".join(text.translate(replacements).lower().split())
 
 
 def build_general_chat_messages(

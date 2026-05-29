@@ -20,3 +20,5 @@ data/runtime/debug/*
 !data/runtime/debug/.gitkeep
 wa-chatbot-master/
 whatsapp-chatgpt-bot-master/
+referencias-chatbots/
+free-llm-api-resources-main/

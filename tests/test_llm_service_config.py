@@ -1,4 +1,4 @@
-import json
+﻿import json
 import time
 from urllib import error as urllib_error
 
@@ -48,6 +48,43 @@ def test_llm_service_configures_groq_client(monkeypatch) -> None:
     assert service.client is not None
     assert service.client.kwargs["api_key"] == "groq-test-key"
     assert service.client.kwargs["base_url"] == "https://api.groq.com/openai/v1"
+
+
+def test_llm_service_configures_openai_without_touching_ollama(monkeypatch) -> None:
+    monkeypatch.setattr(llm_module, "OpenAI", DummyOpenAI)
+
+    def fail_if_ollama_is_called(*args, **kwargs):
+        raise AssertionError("Ollama should not be called when LLM_PROVIDER=openai")
+
+    monkeypatch.setattr(LLMService, "_request_ollama_json", fail_if_ollama_is_called)
+    settings = Settings(
+        llm_provider="openai",
+        llm_mode="auto",
+        openai_api_key="openai-test-key",
+        openai_model="gpt-5.4-mini",
+        ollama_enabled=False,
+    )
+
+    service = LLMService(settings, setup_logging("INFO"))
+
+    assert service.provider == "openai"
+    assert service.client is not None
+    assert service.client.kwargs["api_key"] == "openai-test-key"
+    assert service.client.kwargs["base_url"] == "https://api.openai.com/v1"
+
+
+def test_llm_service_reports_missing_openai_api_key() -> None:
+    settings = Settings(
+        llm_provider="openai",
+        llm_mode="auto",
+        openai_api_key="",
+    )
+
+    service = LLMService(settings, setup_logging("INFO"))
+    answer, used_llm = service.generate_general_answer("Hola")
+
+    assert used_llm is False
+    assert answer == "Falta configurar OPENAI_API_KEY en el archivo .env."
 
 
 class DummyResponseResult:
@@ -289,6 +326,7 @@ def _ollama_settings() -> Settings:
     return Settings(
         llm_provider="ollama",
         llm_mode="auto",
+        ollama_enabled=True,
         ollama_base_url="http://localhost:11434",
         ollama_model="qwen3.5:4b",
         ollama_timeout=120,
@@ -297,6 +335,32 @@ def _ollama_settings() -> Settings:
         ollama_max_tokens=400,
         ollama_keep_alive="10m",
     )
+
+
+def test_llm_service_rejects_ollama_when_disabled() -> None:
+    settings = Settings(
+        llm_provider="ollama",
+        llm_mode="auto",
+        ollama_enabled=False,
+        ollama_model="llama3.1",
+    )
+
+    service = LLMService(settings, setup_logging("INFO"))
+    answer, used_llm = service.generate_general_answer("Hola")
+
+    assert service.client is None
+    assert used_llm is False
+    assert (
+        answer
+        == "Ollama está desactivado. Para usar IA local, configura OLLAMA_ENABLED=true e inicia Ollama manualmente."
+    )
+
+
+def test_llm_service_enables_ollama_only_when_flag_is_true() -> None:
+    service = LLMService(_ollama_settings(), setup_logging("INFO"))
+
+    assert service.provider == "ollama"
+    assert service.client is not None
 
 
 def test_llm_service_calls_native_ollama_generate_endpoint(monkeypatch) -> None:
@@ -329,7 +393,8 @@ def test_llm_service_calls_native_ollama_generate_endpoint(monkeypatch) -> None:
 
     assert used_llm is True
     assert "Respuesta basada en evidencia." in answer
-    assert "[Fuente: Ordenanza 227-2019-MDP/C - Articulo 16 - Estado: VIGENTE]" in answer
+    assert "Fuente: Ordenanza 227-2019-MDP/C - Articulo 16" in answer
+    assert "Estado: VIGENTE" not in answer
     assert captured["url"] == "http://localhost:11434/api/generate"
     assert captured["timeout"] == 120
     assert captured["payload"]["model"] == "qwen3.5:4b"
@@ -369,7 +434,8 @@ def test_llm_service_does_not_replace_generated_answer_with_hardcoded_text(monke
 
     assert used_llm is True
     assert answer.startswith("Si, puede vender")
-    assert "Ordenanza 227-2019-MDP/C - Articulo 2 - Estado: VIGENTE" in answer
+    assert "Ordenanza 227-2019-MDP/C - Articulo 2" in answer
+    assert "Estado: VIGENTE" not in answer
     assert (
         service.classify_response_origin(
             "Puedo vender en una zona rigida?",
@@ -505,6 +571,7 @@ def test_llm_service_uses_ollama_even_when_llm_mode_is_mock(monkeypatch) -> None
     settings = Settings(
         llm_provider="ollama",
         llm_mode="mock",
+        ollama_enabled=True,
         ollama_base_url="http://localhost:11434",
         ollama_model="qwen3.5:4b",
         ollama_timeout=120,
@@ -574,8 +641,8 @@ def test_llm_service_ollama_failure_falls_back_without_crashing(monkeypatch) -> 
     )
 
     assert used_llm is False
-    assert "esto es lo que encontre" in answer.lower()
-    assert "estado: vigente" in answer.lower()
+    assert "claro, te explico" in answer.lower()
+    assert "estado: vigente" not in answer.lower()
 
 
 def test_llm_service_does_not_call_ollama_without_rag_evidence(monkeypatch) -> None:
@@ -588,5 +655,5 @@ def test_llm_service_does_not_call_ollama_without_rag_evidence(monkeypatch) -> N
     answer, used_llm = service.generate_answer("Cuanto cuesta actualmente?", [])
 
     assert used_llm is False
-    assert "costo exacto actualizado" in answer.lower()
+    assert "costo exacto" in answer.lower()
     assert "tupa vigente" in answer.lower()

@@ -16,9 +16,9 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if update.message is None or update.effective_chat is None:
         return
     await update.message.reply_text(
-        "Hola, soy PachaBot. Puedes escribirme de forma natural. "
-        "Si preguntas por comercio ambulatorio, usare la base documental municipal "
-        "para orientarte con palabras sencillas."
+        "¡Hola! 😊 Soy PachaBot. Puedes escribirme de forma natural. "
+        "Te puedo orientar sobre comercio ambulatorio, permisos, requisitos, "
+        "renovación y zonas usando los documentos municipales cargados."
     )
 
 
@@ -28,7 +28,7 @@ async def help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if update.message is None:
         return
     await update.message.reply_text(
-        "Hola. Conversa conmigo normalmente: puedo saludar y orientar consultas "
+        "Hola 😊 Conversa conmigo normalmente: puedo saludar y orientar consultas "
         "sobre comercio ambulatorio usando los documentos municipales cargados.\n\n"
         "Comandos utiles:\n"
         " /reset - Borrar el contexto de este chat\n"
@@ -131,7 +131,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         payload = assistant.answer_chat_message(incoming)
 
         # Hacer la respuesta más amigable añadiendo un emoji inicial
-        response = "🙂 " + payload.answer.strip()
+        response = payload.answer.strip()
         if payload.sources:
             response += "\n\nFuente(s): " + "; ".join(payload.sources[:3])
 

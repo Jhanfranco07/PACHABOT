@@ -1,0 +1,79 @@
+{
+  "id": "glosario_comercio_ambulatorio",
+  "nombre": "Glosario ciudadano de comercio ambulatorio",
+  "descripcion": "Definiciones breves para orientar por etapas antes de explicar tramites completos.",
+  "conceptos": [
+    {
+      "id": "comercio_ambulatorio",
+      "termino": "Comercio ambulatorio",
+      "variantes": [
+        "comercio en via publica",
+        "venta ambulante",
+        "vender en la calle",
+        "ser ambulatorio"
+      ],
+      "definicion_ciudadana": "El comercio ambulatorio es la venta de productos o servicios en espacios publicos, como calles o zonas autorizadas, de manera temporal y con autorizacion de la municipalidad.",
+      "pregunta_orientadora": "Quieres que te explique como sacar el permiso, que requisitos necesitas o en que zonas se puede vender?",
+      "fuente": "Ordenanza N. 227-2019-MDP/C"
+    },
+    {
+      "id": "padron_municipal",
+      "termino": "Padron municipal",
+      "variantes": [
+        "padron",
+        "registro municipal",
+        "padron de comerciantes"
+      ],
+      "definicion_ciudadana": "El padron municipal es un registro donde la municipalidad identifica a las personas evaluadas o registradas para realizar una actividad, como el comercio ambulatorio.",
+      "pregunta_orientadora": "Quieres que te explique como se ingresa al padron o que documentos se presentan?",
+      "fuente": "Ordenanza N. 227-2019-MDP/C"
+    },
+    {
+      "id": "tupa",
+      "termino": "TUPA",
+      "variantes": [
+        "pago tupa",
+        "derecho tupa",
+        "costo tupa"
+      ],
+      "definicion_ciudadana": "El TUPA es el documento donde la municipalidad publica sus tramites y pagos oficiales. Para saber un monto exacto, se debe revisar el TUPA vigente.",
+      "pregunta_orientadora": "Quieres que te explique que parte del tramite depende del TUPA o que requisitos si estan cargados?",
+      "fuente": "TUPA vigente / Ordenanza N. 227-2019-MDP/C"
+    },
+    {
+      "id": "sisa",
+      "termino": "SISA",
+      "variantes": [
+        "pago sisa",
+        "tributo sisa"
+      ],
+      "definicion_ciudadana": "La SISA es un pago municipal relacionado con el uso del espacio autorizado para el comercio ambulatorio, cuando corresponde segun la autorizacion.",
+      "pregunta_orientadora": "Quieres que te explique cuanto se paga de SISA o que pasa si no se paga?",
+      "fuente": "Ordenanza N. 227-2019-MDP/C"
+    },
+    {
+      "id": "modulo",
+      "termino": "Modulo",
+      "variantes": [
+        "puesto",
+        "stand",
+        "mobiliario"
+      ],
+      "definicion_ciudadana": "Un modulo es el puesto o mobiliario desmontable que se usa para realizar la actividad comercial en el espacio autorizado.",
+      "pregunta_orientadora": "Quieres que te explique que condiciones debe cumplir el modulo o en que zonas puede ubicarse?",
+      "fuente": "Ordenanza N. 227-2019-MDP/C"
+    },
+    {
+      "id": "giro",
+      "termino": "Giro",
+      "variantes": [
+        "rubro",
+        "actividad",
+        "tipo de venta"
+      ],
+      "definicion_ciudadana": "El giro es el tipo de producto o servicio que la municipalidad autoriza vender, por ejemplo alimentos preparados, bebidas u otros rubros permitidos.",
+      "pregunta_orientadora": "Quieres que te explique que giros o rubros aparecen como permitidos?",
+      "fuente": "Ordenanza N. 227-2019-MDP/C"
+    }
+  ]
+}

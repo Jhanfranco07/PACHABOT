@@ -91,3 +91,51 @@ def test_query_rewriter_skips_ollama_for_standalone_question(tmp_path) -> None:
 
     assert rewritten == "Que requisitos necesito para vender"
     assert llm_service.received_history is None
+
+
+def test_query_rewriter_expands_location_follow_up_without_external_llm(tmp_path) -> None:
+    settings = Settings(
+        llm_provider="mock",
+        llm_mode="mock",
+        raw_data_dir=tmp_path / "raw",
+        processed_data_dir=tmp_path / "processed",
+        vectorstore_dir=tmp_path / "vectorstore",
+        conversations_dir=tmp_path / "processed" / "conversations",
+        chat_modes_dir=tmp_path / "processed" / "chat_modes",
+        processed_chunks_file=tmp_path / "processed" / "chunks.json",
+        vectorizer_file=tmp_path / "vectorstore" / "tfidf_vectorizer.joblib",
+        matrix_file=tmp_path / "vectorstore" / "tfidf_matrix.joblib",
+    )
+    llm_service = DummyLLMService()
+    llm_service.client = None
+    rewriter = QueryRewriter(settings, llm_service, setup_logging("INFO"))
+    history = [ConversationTurn(role="user", text="Puedo vender en zona rigida")]
+
+    rewritten = rewriter.rewrite("y si es en Manchay", history)
+
+    assert "Puedo vender en zona rigida" in rewritten
+    assert "Manchay" in rewritten
+
+
+def test_query_rewriter_reconstructs_non_compliance_follow_up(tmp_path) -> None:
+    settings = Settings(
+        llm_provider="mock",
+        llm_mode="mock",
+        raw_data_dir=tmp_path / "raw",
+        processed_data_dir=tmp_path / "processed",
+        vectorstore_dir=tmp_path / "vectorstore",
+        conversations_dir=tmp_path / "processed" / "conversations",
+        chat_modes_dir=tmp_path / "processed" / "chat_modes",
+        processed_chunks_file=tmp_path / "processed" / "chunks.json",
+        vectorizer_file=tmp_path / "vectorstore" / "tfidf_vectorizer.joblib",
+        matrix_file=tmp_path / "vectorstore" / "tfidf_matrix.joblib",
+    )
+    llm_service = DummyLLMService()
+    llm_service.client = None
+    rewriter = QueryRewriter(settings, llm_service, setup_logging("INFO"))
+    history = [ConversationTurn(role="user", text="Que obligaciones tiene un comerciante ambulante")]
+
+    rewritten = rewriter.rewrite("que pasa si no cumple", history)
+
+    assert "obligaciones" in rewritten.lower()
+    assert "no cumple" in rewritten.lower()
