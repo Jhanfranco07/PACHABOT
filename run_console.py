@@ -25,7 +25,7 @@ def _parse_args():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Prueba PACHABOT en consola usando el mismo RAG y LLM que Telegram."
+        description="Prueba PACHABOT en consola usando el mismo RAG y LLM que la API web."
     )
     parser.add_argument(
         "--session-id",
@@ -93,7 +93,6 @@ def main() -> None:
             continue
         if command == "/estado":
             status = assistant.get_runtime_status(channel=CHANNEL, session_id=session_id)
-            status = status.replace("Canal activo: Telegram", "Canal activo: Consola local", 1)
             print("\n" + status)
             continue
         response = assistant.answer_chat_message(

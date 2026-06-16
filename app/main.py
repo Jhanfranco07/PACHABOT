@@ -121,7 +121,7 @@ def info() -> dict[str, object]:
             "Ordenanza 108-2012-MDP/C",
             "Ordenanza 227-2019-MDP/C",
         ],
-        "channels": ["telegram", "api", "web-simulator"],
+        "channels": ["api", "web-simulator"],
         "memory_enabled": True,
         "tools": ["query_rewrite", "document_search"],
     }

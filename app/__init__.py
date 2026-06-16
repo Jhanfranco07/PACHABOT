@@ -1,1 +1,1 @@
-"""Application package for the Telegram municipal assistant prototype."""
+"""Application package for the municipal assistant prototype."""

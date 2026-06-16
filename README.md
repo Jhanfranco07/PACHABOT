@@ -2,9 +2,11 @@
 
 PachaBot es un Asistente Virtual Inteligente Conversacional disenado para orientar a ciudadanos y emprendedores en tramites municipales. Utiliza modelos de lenguaje, recuperacion aumentada por generacion (RAG), memoria conversacional y consulta de fuentes documentales oficiales para entregar respuestas claras, trazables y sustentadas.
 
-El proyecto esta enfocado inicialmente en comercio ambulatorio de la Municipalidad Distrital de Pachacamac. La ficha de tramite cargada identifica como area responsable a la Gerencia de Turismo y Desarrollo Economico / subgerencia competente; esta denominacion debe validarse institucionalmente antes de publicacion.
+El proyecto esta orientado a los tramites municipales gestionados por la Gerencia de Licenciasy Desarrollo Economico de la Municipalidad Distrital de Pachacamac. 
 
-Funciona localmente en Telegram, consola, FastAPI y simulador web, y su arquitectura queda preparada para integrar herramientas especializadas mediante MCP.
+Aunque **inicialmente esta enfocado en comercio ambulatorio**, la arquitectura esta disenada para escalar e incorporar proximamente bases de conocimiento para **licencias de funcionamiento** y **anuncios publicitarios**, cubriendo asi los permisos principales de dicha gerencia.
+
+Funciona localmente en consola, FastAPI y simulador web. El despliegue para el usuario final se orientara a WhatsApp o un portal web institucional. Su arquitectura queda preparada para integrar herramientas especializadas mediante MCP.
 
 ## Objetivo
 
@@ -14,6 +16,7 @@ Fuentes normativas principales:
 
 - Ordenanza 108-2012-MDP/C
 - Ordenanza 227-2019-MDP/C
+- Base de Conocimiento Simplificada (Lenguaje Ciudadano)
 
 Prioridades del prototipo:
 
@@ -43,17 +46,17 @@ Un chatbot basico suele responder con reglas, menus o preguntas frecuentes fijas
 
 El proyecto esta organizado como un agente conversacional con recuperacion documental local:
 
-- `channels/`: adapta Telegram al formato interno del asistente
+- `channels/`: adapta los canales de comunicacion (web, WhatsApp, etc.) al formato interno del asistente
 - `memory/`: guarda historial, modo, ultima intencion, fuentes usadas y advertencias
 - `tools/`: concentra herramientas documentales para reescribir consultas y recuperar evidencia
 - `services/`: contiene el orquestador inteligente, router, rewriter, retrieval, evidencia y LLM
-- `api/`: expone un endpoint HTTP para probar el asistente fuera de Telegram
+- `api/`: expone un endpoint HTTP para interactuar con el asistente
 
 Flujo:
 
 ```text
 Entrada del usuario
-  -> canal Telegram/web/consola
+  -> canal mensajeria/web/consola
   -> normalizacion
   -> router de intencion
   -> memoria conversacional
@@ -139,7 +142,6 @@ MCP permitira conectar este asistente conversacional con herramientas externas o
 - consulta de requisitos estructurados por tramite;
 - consulta de costos o TUPA vigente;
 - busqueda normativa con filtros por articulo y vigencia;
-- validacion de zonas restringidas mediante plano o base georreferenciada;
 - consulta de expedientes, si existiera autorizacion futura;
 - conexion con bases internas o APIs simuladas para evaluacion academica;
 - exposicion de recursos documentales para panel administrativo o auditoria.
@@ -171,15 +173,10 @@ project_root/
 |   |-- api/
 |   |   |-- __init__.py
 |   |   `-- schemas.py
-|   |-- bot/
-|   |   |-- __init__.py
-|   |   |-- handlers.py
-|   |   |-- keyboards.py
-|   |   `-- telegram_bot.py
 |   |-- channels/
 |   |   |-- __init__.py
 |   |   |-- schemas.py
-|   |   `-- telegram.py
+|   |   `-- web.py
 |   |-- core/
 |   |   |-- __init__.py
 |   |   |-- logger.py
@@ -214,12 +211,15 @@ project_root/
 |   `-- main.py
 |-- data/
 |   |-- raw/
+|   |   |-- base_conocimiento_comercio_ambulatorio_pachacamac.txt
 |   |   |-- ordenanza_108_2012.txt
 |   |   `-- ordenanza_227_2019.txt
 |   |-- cleaned/
+|   |   `-- base_conocimiento_comercio_ambulatorio_pachacamac.cleaned.txt
 |   |-- consolidated/
 |   |   `-- norma_consolidada.json
 |   |-- processed/
+|   |   |-- conversations/
 |   |   `-- chunks.json
 |   |-- tramites/
 |   |   |-- comercio_ambulatorio.json
@@ -280,7 +280,6 @@ Copy-Item .env.example .env
 
 Completa al menos:
 
-- `TELEGRAM_BOT_TOKEN`
 - `OPENAI_API_KEY`
 
 Por defecto PachaBot usa OpenAI API:
@@ -352,7 +351,6 @@ OLLAMA_ENABLED=false
 Ejemplo base:
 
 ```env
-TELEGRAM_BOT_TOKEN=
 LLM_PROVIDER=openai
 LLM_MODE=auto
 OPENAI_API_KEY=
@@ -449,24 +447,9 @@ python scripts/ingest_documents.py
 
 No cargues un monto, plazo o restriccion como definitivo sin una fuente vigente.
 
-## Ejecutar el canal Telegram
-
-Con `.env` configurado con OpenAI:
-
-```powershell
-python run.py
-```
-
-Comandos disponibles en Telegram:
-
-- `/start`
-- `/help`
-- `/reset`
-- `/estado`
-
 ## Probar en consola de VS Code
 
-Para conversar con el asistente sin abrir Telegram, usa el canal local interactivo.
+Para conversar con el asistente localmente sin depender de plataformas de mensajeria externas, usa el canal local interactivo.
 Este canal utiliza el mismo RAG, memoria y proveedor LLM configurado que el asistente.
 
 ```powershell
@@ -514,7 +497,7 @@ Vuelve a `LLM_PROVIDER=openai` y `OLLAMA_ENABLED=false` si quieres evitar consum
 
 ## Simulador web tipo chat
 
-Para probar el asistente en una interfaz similar a mensajeria, sin abrir Telegram:
+Para probar el asistente en una interfaz web institucional similar a mensajeria:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
@@ -535,7 +518,7 @@ Desde la pantalla puedes:
 - reiniciar la conversación conservando el mismo servidor local.
 
 La seleccion web de Ollama es temporal: solo se mantiene mientras la API esta ejecutandose.
-Para Telegram, deja el proveedor definitivo configurado en `.env`.
+Para la ejecucion principal, deja el proveedor definitivo configurado en `.env`.
 
 ## Probar por HTTP
 
@@ -580,6 +563,7 @@ POST /chat
 - `Que necesito y cuanto cuesta`
 - `Cuanto mide un modulo`
 - `Cuanto se paga de SISA`
+- `Que es el SISA`
 - `Que zonas son rigidas`
 - `Que dice el articulo 7`
 - `Explicame la autorizacion municipal`
@@ -588,6 +572,7 @@ POST /chat
 ## Comportamiento esperado
 
 - si la consulta esta dentro del dominio, el sistema busca evidencia y responde con lenguaje natural
+- soporta el cambio de contexto ("Modo General" y "Modo Comercio") para separar conversaciones libres del asesoramiento normativo
 - si la consulta es de seguimiento, intenta aprovechar el contexto del chat
 - si la evidencia es debil, responde con honestidad y evita inventar
 - las respuestas municipales solicitan brevedad y evitan agregar datos no preguntados
@@ -609,7 +594,7 @@ descargados en `referencias-chatbots/` no se mezclen con las pruebas del sistema
 
 ## Referentes revisados y decisiones
 
-- `RAG-Telegram-Bot-LangChain-OpenAI`: es valiosa su separacion `bot/` y `core/`, junto con pruebas de limpieza, split estructural, reformulacion y versionado. PachaBot mantiene esa separacion mediante `channels/`, `services/`, `documents/` y sus reglas de vigencia.
+- Repositorios de asistentes RAG: es valiosa su separacion de canales y capa `core/`, junto con pruebas de limpieza, split estructural, reformulacion y versionado. PachaBot mantiene esa separacion modular mediante `channels/`, `services/`, `documents/` y sus reglas de vigencia.
 - `AI-RAG-Assistant-Chatbot`: aporta historial, fuentes persistidas, degradacion controlada y preparacion MCP. Sus dependencias cloud (Pinecone, Neo4j y servicios de despliegue) no se adoptan porque PachaBot debe seguir local.
 - `pathwaycom/llm-app`: aporta la idea de ingesta observable, entradas consultables y servidor MCP documental. Se toma como direccion futura; la ingesta actual permanece simple con archivos y TF-IDF.
 - `datvodinh/rag-chatbot`: confirma un flujo local con Ollama, PDFs, memoria y combinacion de recuperadores. Chroma/BM25/embeddings quedan como evolucion opcional despues de estabilizar el corpus juridico.
@@ -624,7 +609,7 @@ generacion y servicios externos solo opcionales.
 - el indice TF-IDF es adecuado para el corpus inicial, pero pierde sinonimos y variaciones semanticas amplias
 - no hay OCR ni extractor PDF general integrado; la ingesta vigente parte de texto o DOCX previamente extraido
 - no hay panel admin
-- WhatsApp aun no esta conectado, aunque la arquitectura ya esta separada por canal
+- el canal definitivo (WhatsApp o portal web) aun no esta conectado, aunque la arquitectura modular en `channels/` ya lo soporta
 - si xAI devuelve `403` por falta de creditos, el proyecto trabajara en fallback local
 - los datos de area responsable, TUPA y ubicaciones deben revisarse con la municipalidad antes de publicacion
 
@@ -632,7 +617,8 @@ generacion y servicios externos solo opcionales.
 
 - agregar parser PDF/OCR con metadatos de pagina y limpieza juridica
 - exponer retrieval documental mediante MCP manteniendo archivos locales
-- sumar un canal WhatsApp reutilizando `channels/`
+- integrar el canal definitivo para el usuario final (WhatsApp o un portal web) reutilizando `channels/`
 - evaluar ChromaDB o FAISS con embeddings locales como indice semantico opcional
+- ampliar la base documental con tramites de licencias de funcionamiento y anuncios publicitarios
 - crear panel administrativo para revisar fuentes, conflictos y trazas
 - ejecutar evaluacion de usabilidad SUS con usuarios y pruebas de exactitud documental
