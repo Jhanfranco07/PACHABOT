@@ -530,6 +530,28 @@
       if (provider === "grok") return "xAI";
       return "Proveedor LLM";
     }
+    function appendInlineMarkdown(container, line) {
+      const parts = line.split(/(\*\*[^*]+\*\*)/g);
+      for (const part of parts) {
+        if (!part) continue;
+        if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+          const strong = document.createElement("strong");
+          strong.textContent = part.slice(2, -2);
+          container.appendChild(strong);
+        } else {
+          container.appendChild(document.createTextNode(part));
+        }
+      }
+    }
+    function appendFormattedText(container, text) {
+      const lines = String(text || "").split(/\r?\n/);
+      lines.forEach((line, index) => {
+        appendInlineMarkdown(container, line);
+        if (index < lines.length - 1) {
+          container.appendChild(document.createElement("br"));
+        }
+      });
+    }
     function appendMessage(text, owner, metadata = "", origin = null) {
       const wrapper = document.createElement("div");
       wrapper.className = `message ${owner}`;
@@ -542,7 +564,7 @@
         bubble.appendChild(badge);
         bubble.appendChild(document.createElement("br"));
       }
-      bubble.appendChild(document.createTextNode(text));
+      appendFormattedText(bubble, text);
       wrapper.appendChild(bubble);
       if (metadata) {
         const meta = document.createElement("div");
