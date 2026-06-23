@@ -173,6 +173,26 @@ class LLMService:
         if self.client is None:
             return question
 
+        try:
+            messages = build_query_rewrite_messages(question, history)
+            rewritten = self._call_provider(
+                system_prompt=QUERY_REWRITE_SYSTEM_PROMPT,
+                messages=messages,
+                temperature=0.0,
+                warning_label="query rewriting",
+            )
+            cleaned = rewritten.strip().strip("\"'")
+            first_line = cleaned.splitlines()[0].strip() if cleaned else question
+            return first_line or question
+        except Exception as exc:  # pragma: no cover
+            self._log_provider_failure("Fallo la reescritura de consulta con el proveedor externo", exc)
+            if self._should_disable_external_client(exc):
+                self.logger.warning(
+                    "Se desactivara temporalmente el proveedor externo y la reescritura seguira en modo heuristico."
+                )
+                self.client = None
+            return question
+
     def interpret_intent(
         self,
         question: str,
@@ -212,27 +232,14 @@ class LLMService:
             self._log_provider_failure("Fallo la interpretacion de intencion con el proveedor externo", exc)
             return {}
 
-        return _parse_json_object(raw)
-
         try:
-            messages = build_query_rewrite_messages(question, history)
-            rewritten = self._call_provider(
-                system_prompt=QUERY_REWRITE_SYSTEM_PROMPT,
-                messages=messages,
-                temperature=0.0,
-                warning_label="query rewriting",
+            return _parse_json_object(raw)
+        except ValueError:
+            self.logger.warning(
+                "La interpretacion de intencion no devolvio JSON valido; se usara el router local. Respuesta: %r",
+                raw[:240],
             )
-            cleaned = rewritten.strip().strip("\"'")
-            first_line = cleaned.splitlines()[0].strip() if cleaned else question
-            return first_line or question
-        except Exception as exc:  # pragma: no cover
-            self._log_provider_failure("Fallo la reescritura de consulta con el proveedor externo", exc)
-            if self._should_disable_external_client(exc):
-                self.logger.warning(
-                    "Se desactivara temporalmente el proveedor externo y la reescritura seguira en modo heuristico."
-                )
-                self.client = None
-            return question
+            return {}
 
     def _call_provider(
         self,

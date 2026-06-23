@@ -87,6 +87,24 @@ def test_llm_service_reports_missing_openai_api_key() -> None:
     assert answer == "Falta configurar OPENAI_API_KEY en el archivo .env."
 
 
+def test_interpret_intent_ignores_non_json_provider_response(monkeypatch) -> None:
+    monkeypatch.setattr(llm_module, "OpenAI", DummyOpenAI)
+    settings = Settings(
+        llm_provider="openai",
+        llm_mode="auto",
+        openai_api_key="openai-test-key",
+        openai_model="gpt-5.4-mini",
+    )
+    service = LLMService(settings, setup_logging("INFO"))
+
+    def fake_call_provider(**kwargs):
+        return "Internal Server Error; upstream returned text instead of JSON"
+
+    monkeypatch.setattr(service, "_call_provider", fake_call_provider)
+
+    assert service.interpret_intent("Cuantos giros permitidos existen?") == {}
+
+
 class DummyResponseResult:
     output_text = ""
 
