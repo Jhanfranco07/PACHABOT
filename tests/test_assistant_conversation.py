@@ -369,6 +369,40 @@ def test_follow_up_confirmation_about_sisa_answers_directly(tmp_path: Path) -> N
     assert "s/ 1.00" in payload.answer.lower() or "s/. 1.00" in payload.answer.lower() or "sisa" in payload.answer.lower()
 
 
+def test_ambiguous_money_follow_up_asks_before_assuming(tmp_path: Path) -> None:
+    assistant, _memory = build_assistant(tmp_path)
+    session_id = "chat-ambiguous-money"
+    assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id=session_id,
+            user_id="user-ambiguous-money",
+            text="Como renuevo mi permiso?",
+        )
+    )
+    assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id=session_id,
+            user_id="user-ambiguous-money",
+            text="Tambien me piden voucher de SISA",
+        )
+    )
+
+    payload = assistant.answer_chat_message(
+        IncomingChatMessage(
+            channel="telegram",
+            session_id=session_id,
+            user_id="user-ambiguous-money",
+            text="y cuanto es",
+        )
+    )
+
+    assert payload.confidence_level == "clarification"
+    assert "TUPA" in payload.answer
+    assert "SISA" in payload.answer
+
+
 def test_fallback_answers_module_question_with_honest_limit(tmp_path: Path) -> None:
     assistant, _memory = build_assistant(tmp_path)
 

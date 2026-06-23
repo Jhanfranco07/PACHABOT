@@ -11,7 +11,7 @@ from app.utils.query_expansion import expansion_terms, related_search_queries
 from app.utils.text_cleaner import normalize_for_search
 
 
-ARTICLE_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)", re.IGNORECASE)
+ARTICLE_PATTERN = re.compile(r"\b(?:art[ií]culo|art\.?)\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)", re.IGNORECASE)
 COMMON_TYPO_HINTS = {
     "ke": "que",
     "qe": "que",
@@ -146,7 +146,7 @@ class DocumentToolkit:
 
         normalized_question = normalize_for_search(question)
         normalized_effective_query = normalize_for_search(effective_query)
-        article_match = ARTICLE_PATTERN.search(effective_query)
+        article_match = ARTICLE_PATTERN.search(f"{question} {effective_query}")
         article_label = article_match.group(1).upper() if article_match else ""
         asks_definition = any(
             pattern in normalized_question
@@ -480,7 +480,7 @@ class DocumentToolkit:
                 if hygiene_chunks:
                     return hygiene_chunks[: self.settings.retrieval_top_k]
 
-        if intent == QueryIntent.NORMATIVA:
+        if intent == QueryIntent.NORMATIVA and not article_label:
             identity_chunks = self._normative_identity_evidence()
             if identity_chunks:
                 # CAMBIO FASE SIMULADOR 2 - Responder la norma aplicable con evidencia de identidad.
@@ -636,6 +636,12 @@ class DocumentToolkit:
     def _format_source(self, chunk: RetrievedChunk) -> str:
         """Create a concise source string."""
 
+        if chunk.fuente and chunk.article_label:
+            normalized_source = normalize_for_search(chunk.fuente)
+            normalized_article = normalize_for_search(f"articulo {chunk.article_label}")
+            normalized_short_article = normalize_for_search(f"art. {chunk.article_label}")
+            if normalized_article not in normalized_source and normalized_short_article not in normalized_source:
+                return f"{chunk.source_title} | Art. {chunk.article_label}"
         if chunk.fuente:
             return chunk.fuente
         parts = [chunk.source_title]

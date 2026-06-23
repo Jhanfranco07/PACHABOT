@@ -11,6 +11,7 @@ from urllib import request as urllib_request
 from app.config import Settings
 from app.core.prompts import (
     GENERAL_CHAT_SYSTEM_PROMPT,
+    INTENT_INTERPRETATION_SYSTEM_PROMPT,
     NO_INFO_PROMPT,
     QUERY_REWRITE_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -171,6 +172,47 @@ class LLMService:
 
         if self.client is None:
             return question
+
+    def interpret_intent(
+        self,
+        question: str,
+        *,
+        history: list[ConversationTurn] | None = None,
+        router_hint: str = "",
+    ) -> dict:
+        """Ask the LLM to interpret intent when the deterministic router is uncertain."""
+
+        history = history or []
+        if self.client is None:
+            return {}
+
+        recent_history = "\n".join(
+            f"{turn.role}: {turn.text}"
+            for turn in history[-6:]
+        )
+        messages = [
+            {
+                "role": "user",
+                "content": (
+                    f"HISTORIAL RECIENTE:\n{recent_history or 'Sin historial'}\n\n"
+                    f"PISTA DEL ROUTER:\n{router_hint or 'Sin pista'}\n\n"
+                    f"PREGUNTA ACTUAL:\n{question}\n\n"
+                    "Interpreta la intencion y devuelve solo JSON."
+                ),
+            }
+        ]
+        try:
+            raw = self._call_provider(
+                system_prompt=INTENT_INTERPRETATION_SYSTEM_PROMPT,
+                messages=messages,
+                temperature=0.0,
+                warning_label="interpretacion de intencion",
+            )
+        except Exception as exc:  # pragma: no cover
+            self._log_provider_failure("Fallo la interpretacion de intencion con el proveedor externo", exc)
+            return {}
+
+        return _parse_json_object(raw)
 
         try:
             messages = build_query_rewrite_messages(question, history)
@@ -714,13 +756,8 @@ class LLMService:
 
         guarded = re.sub(r"\bTUPA\s*\([^)]*\)", "TUPA", answer, flags=re.IGNORECASE)
         guarded = re.sub(
-            r"(?is)^\s*(?:hola[!.]?\s*)?(?:soy\s+pachabot[,.]?\s*)+",
-            "",
-            guarded,
-        ).lstrip()
-        guarded = re.sub(
-            r"(?is)^\s*hola[!.]?\s*(?:soy\s+pachabot[,.]?\s*)?\n+",
-            "",
+            r"(?is)^\s*(?:hola[!.]?\s*)?soy\s+pachabot[,.]?\s*",
+            "Hola, ",
             guarded,
         ).lstrip()
         normalized_question = question.lower()
@@ -1125,3 +1162,26 @@ def _naturalize_definition_follow_up(follow_up: str) -> str:
             "en qué zonas no se puede vender. ¿Qué te gustaría revisar?"
         )
     return follow_up
+
+
+def _parse_json_object(raw: str) -> dict:
+    """Parse a provider JSON object, tolerating small wrappers around it."""
+
+    text = raw.strip()
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else {}
+    except json.JSONDecodeError:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return {}
+    try:
+        parsed = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}

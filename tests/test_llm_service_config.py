@@ -457,6 +457,27 @@ def test_llm_service_does_not_replace_generated_answer_with_hardcoded_text(monke
     )
 
 
+def test_llm_safety_guards_keep_warm_document_opening() -> None:
+    service = LLMService(Settings(llm_provider="mock", llm_mode="mock"), setup_logging("INFO"))
+
+    answer = service._apply_municipal_safety_guards(
+        "Que requisitos necesito para vender?",
+        "Hola, claro 😊 Para vender por primera vez necesitas presentar solicitud y DNI.",
+        [
+            RetrievedChunk(
+                chunk_id="req",
+                document_id="requisitos",
+                source_title="Ficha interna",
+                text="Requisitos para tramite nuevo.",
+                score=1.0,
+                tipo_contenido="requisito",
+            )
+        ],
+    )
+
+    assert answer.startswith("Hola, claro 😊")
+
+
 def test_llm_service_keeps_normative_answer_generated_by_model(monkeypatch) -> None:
     def fake_urlopen(request, timeout):
         return DummyOllamaResponse({"response": "La ordenanza es la 227."})

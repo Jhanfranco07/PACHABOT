@@ -188,6 +188,7 @@ LEGAL_PATTERNS = (
     "ordenanza",
     "norma",
 )
+ARTICLE_PATTERN = re.compile(r"\b(?:articulo|art\.?)\s+([0-9]+(?:\.[0-9]+)?[a-z]?)", re.IGNORECASE)
 
 
 class QueryRouter:
@@ -195,6 +196,7 @@ class QueryRouter:
 
     def route(self, question: str) -> RoutedQuery:
         normalized = normalize_for_search(question)
+        article_query = ARTICLE_PATTERN.search(normalized) is not None
         matched_keywords: list[str] = []
         intent_scores = {intent: 0.0 for intent in INTENT_HINTS}
         domain_score = 0.0
@@ -216,7 +218,7 @@ class QueryRouter:
             domain_score += 0.6
             matched_keywords.extend(domain_semantic_groups)
 
-        if any(_contains_keyword(normalized, pattern) for pattern in LEGAL_PATTERNS):
+        if article_query or any(_contains_keyword(normalized, pattern) for pattern in LEGAL_PATTERNS):
             domain_score += 1.0
 
         definition_query = any(
@@ -418,11 +420,22 @@ class QueryRouter:
             best_intent = QueryIntent.RUBROS
             best_score = max(best_score, 2.0)
 
+        if article_query:
+            best_intent = QueryIntent.NORMATIVA
+            best_score = max(best_score, 3.0)
+
         in_domain = domain_score > 0 or best_score > 0
         if unrelated_municipal_topic:
             in_domain = False
         if not in_domain:
             best_intent = QueryIntent.OUT_OF_SCOPE
+
+        confidence = _confidence_from_scores(
+            best_score=best_score,
+            domain_score=domain_score,
+            article_query=article_query,
+            matched_keywords=matched_keywords,
+        )
 
         return RoutedQuery(
             original_query=question,
@@ -430,6 +443,7 @@ class QueryRouter:
             intent=best_intent,
             in_domain=in_domain,
             matched_keywords=list(dict.fromkeys(matched_keywords)),
+            confidence=confidence if in_domain else 0.0,
         )
 
 
@@ -467,3 +481,23 @@ def _definition_topic_in_domain(text: str) -> bool:
             "via publica",
         )
     )
+
+
+def _confidence_from_scores(
+    *,
+    best_score: float,
+    domain_score: float,
+    article_query: bool,
+    matched_keywords: list[str],
+) -> float:
+    if article_query:
+        return 0.98
+    if best_score >= 3.0:
+        return 0.92
+    if best_score >= 2.0:
+        return 0.82
+    if best_score >= 1.0 and domain_score >= 1.0:
+        return 0.68
+    if domain_score > 0 or matched_keywords:
+        return 0.52
+    return 0.0

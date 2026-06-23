@@ -10,6 +10,7 @@ from app.memory.conversation_store import ConversationMemoryStore
 from app.models.domain import AssistantMode, QueryIntent
 from app.models.schemas import AnswerPayload, ConversationTurn, EvidenceItem
 from app.services.evidence_service import EvidenceService
+from app.services.intent_interpreter import IntentInterpreterService
 from app.services.llm_service import LLMService
 from app.services.query_router import QueryRouter
 from app.tools.document_toolkit import DocumentToolkit
@@ -121,6 +122,7 @@ class AssistantService:
         mode_store: ChatModeStore,
         logger: logging.Logger,
         evidence_service: EvidenceService | None = None,
+        intent_interpreter: IntentInterpreterService | None = None,
     ) -> None:
         self.settings = settings
         self.router = router
@@ -130,6 +132,7 @@ class AssistantService:
         self.mode_store = mode_store
         self.logger = logger.getChild("assistant_service")
         self.evidence_service = evidence_service or EvidenceService(settings, logger)
+        self.intent_interpreter = intent_interpreter or IntentInterpreterService(router, llm_service, logger)
 
     def answer_chat_message(self, message: IncomingChatMessage) -> AnswerPayload:
         """Answer naturally, adding municipal evidence only when the topic needs it."""
@@ -175,6 +178,23 @@ class AssistantService:
 
         prepared_question, preparation_notes = self.document_toolkit.prepare_query(question)
         routed = self.router.route(prepared_question)
+        interpretation = self.intent_interpreter.interpret(prepared_question, routed, history)
+        routed = interpretation.routed_query
+        if routed.interpreted_query:
+            prepared_question = routed.interpreted_query
+        if routed.needs_clarification:
+            payload = self._build_payload(
+                answer=routed.clarification_question,
+                sources=[],
+                confidence=routed.confidence,
+                used_llm=interpretation.used_llm,
+                response_origin="system",
+                in_domain=routed.in_domain,
+                intent=routed.intent,
+                confidence_level="clarification",
+            )
+            self._remember_exchange(message, question, payload)
+            return payload
         uses_documents = routed.in_domain or self._is_follow_up_to_in_domain_topic(
             normalized_question,
             history,
@@ -208,23 +228,6 @@ class AssistantService:
                 response_origin="llm_conversation" if used_llm else "fallback",
                 in_domain=False,
                 intent=QueryIntent.GENERAL,
-            )
-            self._remember_exchange(message, question, payload)
-            return payload
-
-        if routed.intent == QueryIntent.REQUISITOS_AMBIGUO:
-            payload = self._build_payload(
-                answer=(
-                    "¿Es la primera vez que vas a solicitar el permiso o ya tienes "
-                    "autorización y quieres renovarla? Los requisitos cambian según el caso."
-                ),
-                sources=[],
-                confidence=1.0,
-                used_llm=False,
-                response_origin="system",
-                in_domain=True,
-                intent=QueryIntent.REQUISITOS_AMBIGUO,
-                confidence_level="clarification",
             )
             self._remember_exchange(message, question, payload)
             return payload

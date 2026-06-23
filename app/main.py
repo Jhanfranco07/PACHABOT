@@ -23,6 +23,7 @@ from app.memory.conversation_store import ConversationMemoryStore
 from app.services.assistant_service import AssistantService
 from app.services.document_service import DocumentService
 from app.services.evidence_service import EvidenceService
+from app.services.intent_interpreter import IntentInterpreterService
 from app.services.llm_service import LLMService, OLLAMA_DISABLED_MESSAGE
 from app.services.query_router import QueryRouter
 from app.services.query_rewriter import QueryRewriter
@@ -42,6 +43,7 @@ class AppContainer:
     document_toolkit: DocumentToolkit
     query_rewriter: QueryRewriter
     evidence_service: EvidenceService
+    intent_interpreter: IntentInterpreterService
 
 
 def build_container() -> AppContainer:
@@ -60,6 +62,7 @@ def build_container() -> AppContainer:
     document_toolkit = DocumentToolkit(settings, retrieval_service, query_rewriter, logger)
     document_service = DocumentService(settings, logger)
     evidence_service = EvidenceService(settings, logger)
+    intent_interpreter = IntentInterpreterService(router, llm_service, logger)
     assistant_service = AssistantService(
         settings=settings,
         router=router,
@@ -69,6 +72,7 @@ def build_container() -> AppContainer:
         mode_store=mode_store,
         logger=logger,
         evidence_service=evidence_service,
+        intent_interpreter=intent_interpreter,
     )
     return AppContainer(
         settings=settings,
@@ -81,6 +85,7 @@ def build_container() -> AppContainer:
         document_toolkit=document_toolkit,
         query_rewriter=query_rewriter,
         evidence_service=evidence_service,
+        intent_interpreter=intent_interpreter,
     )
 
 

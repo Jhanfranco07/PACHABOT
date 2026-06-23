@@ -16,7 +16,7 @@ from app.utils.query_expansion import expand_query
 from app.utils.text_cleaner import normalize_for_search
 
 
-ARTICLE_QUERY_PATTERN = re.compile(r"art[ií]culo\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)", re.IGNORECASE)
+ARTICLE_QUERY_PATTERN = re.compile(r"\b(?:art[ií]culo|art\.?)\s+([0-9]+(?:\.[0-9]+)?[A-Z]?)", re.IGNORECASE)
 
 FOLLOW_UP_HINTS = (
     "y ",
@@ -259,6 +259,8 @@ class RetrievalService:
             return query
 
         normalized_query = normalize_for_search(query)
+        if ARTICLE_QUERY_PATTERN.search(query):
+            return query
         tokens = normalized_query.split()
         explicit_follow_up = any(normalized_query.startswith(marker) for marker in FOLLOW_UP_HINTS)
         has_topic_hint = any(hint in normalized_query for hint in TOPIC_HINTS)
@@ -352,6 +354,28 @@ class RetrievalService:
                 bonus += 1.00
             if chunk.article_label == "21":
                 bonus += 1.00
+        if any(
+            term in normalized_query
+            for term in (
+                "cuantos giros",
+                "cuantos rubros",
+                "numero de giros",
+                "cantidad de giros",
+                "giros disponibles",
+                "giros permitidos",
+                "rubros disponibles",
+                "rubros permitidos",
+                "codigos de giro",
+                "listado de giros",
+                "lista de giros",
+            )
+        ):
+            if chunk.tipo_contenido == "rubro":
+                bonus += 5.00
+            if chunk.article_label == "21":
+                bonus += 2.00
+            if chunk.tipo_contenido == "definicion":
+                bonus -= 2.00
         if any(term in normalized_query for term in ("modulo", "puesto", "stand", "mobiliario")) and not any(
             term in normalized_query for term in ("quitar", "retiro", "retirar", "sancion", "revoc")
         ):
@@ -545,10 +569,7 @@ class RetrievalService:
             for item in requirements
         )
         rubros = payload.get("rubros_permitidos", [])
-        rubros_text = "\n".join(
-            _format_rubro_permitido(item)
-            for item in rubros
-        )
+        rubros_text = _format_rubros_permitidos(rubros)
         records = []
         if not (self.settings.tramites_data_dir / "requisitos_comercio_ambulatorio.json").exists():
             records.append(
@@ -619,6 +640,7 @@ class RetrievalService:
                 fuente=fuente,
                 tramite_relacionado=str(payload.get("id", "")),
                 knowledge_layer="tramites",
+                article_label="21" if key == "rubros" else "",
                 requires_review=draft,
             )
             for key, section, text, content_type, fuente in records
@@ -913,6 +935,32 @@ def _format_rubro_permitido(item: Any) -> str:
     if fuente:
         lines.append(f"  Fuente: {fuente}")
     return "\n".join(lines)
+
+
+def _format_rubros_permitidos(items: Any) -> str:
+    if not isinstance(items, list) or not items:
+        return ""
+
+    total_rubros = 0
+    total_giros = 0
+    blocks: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        total_rubros += 1
+        giros = item.get("giros", [])
+        if isinstance(giros, list):
+            total_giros += sum(1 for giro in giros if giro)
+        formatted = _format_rubro_permitido(item)
+        if formatted:
+            blocks.append(formatted)
+
+    summary = (
+        "Articulo 21 - Rubros y giros permitidos para comercio ambulatorio.\n"
+        f"Cantidad total registrada: {total_rubros} rubros y {total_giros} giros permitidos.\n"
+        "La autorizacion municipal debe corresponder a un giro especifico."
+    )
+    return "\n\n".join([summary, *blocks])
 
 
 def _looks_like_new_requirement_query(normalized_query: str) -> bool:

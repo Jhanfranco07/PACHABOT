@@ -8,6 +8,7 @@ from app.prompts.templates import (
     CITATION_FORMAT,
     EVIDENCE_CHECK_PROMPT,
     GENERAL_CHAT_SYSTEM_PROMPT,
+    INTENT_INTERPRETATION_SYSTEM_PROMPT,
     LEGACY_SYSTEM_PROMPT,
     NO_INFO_PROMPT,
     QUERY_REWRITE_SYSTEM_PROMPT,
@@ -70,6 +71,17 @@ def build_answer_messages(
     messages = _history_messages(history)
     context_block = build_context_block(chunks[:4])
     conversational_guidance = build_conversational_guidance(question, chunks)
+    opening_guidance = (
+        "ESTILO DE APERTURA: Esta es la primera respuesta documental de la conversacion. "
+        "Inicia con un saludo breve y cercano, por ejemplo \"Hola, claro 😊\", y luego orienta. "
+        "Usa como maximo 1 emoji.\n\n"
+        if not history
+        else (
+            "ESTILO DE APERTURA: Ya existe historial en la conversacion. No saludes de nuevo, "
+            "pero manten un tono cercano: puedes iniciar con \"Claro 😊\", \"Te explico\" o "
+            "\"Vamos por partes\" si ayuda. Usa como maximo 1 emoji y evita sonar seco.\n\n"
+        )
+    )
     guidance_block = (
         f"\n\nGUIA DE CONTINUIDAD CONVERSACIONAL:\n{conversational_guidance}\n"
         if conversational_guidance
@@ -83,6 +95,7 @@ def build_answer_messages(
                 f"{context_block}\n\n"
                 "---\n\n"
                 f"{EVIDENCE_CHECK_PROMPT}\n\n"
+                f"{opening_guidance}"
                 f"{guidance_block}"
                 f"PREGUNTA DEL CIUDADANO: {question}\n\nRESPUESTA:"
             ),
@@ -106,6 +119,11 @@ def build_conversational_guidance(question: str, chunks: list[RetrievedChunk]) -
                             chunk.article_label,
                             chunk.text[:500],
                             " ".join(chunk.user_intents),
+                            " ".join(
+                                f"{key}:{value}"
+                                for key, value in chunk.metadata.items()
+                                if isinstance(value, (str, int, float, bool))
+                            ),
                         ]
                     )
                     for chunk in chunks[:4]
@@ -119,7 +137,39 @@ def build_conversational_guidance(question: str, chunks: list[RetrievedChunk]) -
         "cierra con una sola pregunta util para orientar el siguiente paso.",
     ]
 
-    if any(term in normalized for term in ("que es", "que significa", "definicion", "a que se refiere")):
+    if any(term in normalized for term in ("diferencia", "comparar", "comparacion", " vs ", "versus")):
+        guidance.append(
+            "Si la pregunta compara dos temas y el contexto solo sustenta uno, no inventes "
+            "el segundo. Explica primero lo que si esta documentado, luego aclara de forma "
+            "amable que para comparar mejor falta cargar documentos del otro tema. Cierra "
+            "ofreciendo revisar el tema disponible o agregar la nueva materia documental."
+        )
+    elif any(
+        term in normalized
+        for term in (
+            "2do",
+            "2 do",
+            "segundo",
+            "3er",
+            "3 er",
+            "tercer",
+            "tercero",
+            "cuarto",
+            "quinto",
+            "esa parte",
+            "ese punto",
+            "eso de",
+            "lo de",
+            "seguimiento enfocado",
+        )
+    ):
+        guidance.append(
+            "Si el ciudadano pregunta por una parte especifica de la respuesta anterior "
+            "(por ejemplo segundo punto, tercer requisito, esa parte, lo de un pago, una "
+            "zona, un giro o una condicion), explica solo esa parte en palabras sencillas. "
+            "No repitas toda la lista ni reinicies el tramite."
+        )
+    elif any(term in normalized for term in ("que es", "que significa", "definicion", "a que se refiere")):
         guidance.append(
             "Si el ciudadano pidio una definicion, da solo el concepto en lenguaje sencillo "
             "y ofrece opciones breves para continuar, sin pedir datos personales ni explicar "
@@ -169,10 +219,17 @@ def build_conversational_guidance(question: str, chunks: list[RetrievedChunk]) -
             "comercio ambulatorio",
         )
     ):
-        guidance.append(
-            "Si trata de venta en via publica o tramite, pregunta solo si ayuda: si es "
-            "solicitud nueva o renovacion, que producto desea vender y en que punto exacto."
-        )
+        if "tipo_tramite:nuevo_ingreso_padron" in normalized or "tipo_tramite:renovacion" in normalized:
+            guidance.append(
+                "El contexto ya identifica si es tramite nuevo o renovacion. No preguntes "
+                "otra vez si es primera vez o renovacion; responde el caso recuperado y, si "
+                "hace falta continuar, pregunta solo por producto o ubicacion."
+            )
+        else:
+            guidance.append(
+                "Si trata de venta en via publica o tramite, pregunta solo si ayuda: si es "
+                "solicitud nueva o renovacion, que producto desea vender y en que punto exacto."
+            )
 
     return "\n".join(f"- {item}" for item in guidance)
 

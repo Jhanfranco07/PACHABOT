@@ -3,168 +3,369 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PachaBot | Simulador local</title>
+  <title>PachaBot | Simulador ciudadano</title>
   <style>
     :root {
-      --green: #176b5a;
-      --green-soft: #d7f7d3;
-      --green-bright: #22a176;
-      --cream: #f5f2ec;
-      --paper: #fffdf9;
-      --line: #e4dfd5;
+      --green-900: #0d4f43;
+      --green-800: #126854;
+      --green-700: #16745e;
+      --green-500: #24a47a;
+      --green-100: #e9f8f1;
+      --green-050: #f3fbf7;
+      --gold: #d8a84f;
+      --cream: #f4efe6;
+      --paper: #fffdf8;
+      --panel: #faf7ef;
+      --line: #e6ded1;
       --ink: #17231f;
-      --muted: #61736d;
-      --shadow: 0 12px 36px rgba(23, 41, 36, .12);
+      --muted: #66756f;
+      --danger: #a54135;
+      --shadow: 0 24px 70px rgba(20, 46, 39, .18);
     }
     * { box-sizing: border-box; }
+    html { height: 100%; }
     body {
       margin: 0;
-      font-family: "Segoe UI", Arial, sans-serif;
-      color: var(--ink);
-      background: linear-gradient(180deg, var(--green) 0 128px, #ece7df 128px);
-      min-height: 100vh;
-    }
-    .shell {
-      max-width: 1160px;
-      height: min(92vh, 840px);
-      min-height: 650px;
-      margin: 34px auto;
-      display: grid;
-      grid-template-columns: 330px 1fr;
-      background: var(--paper);
-      border-radius: 18px;
+      min-height: 100%;
       overflow: hidden;
+      color: var(--ink);
+      font-family: "Segoe UI", Arial, sans-serif;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(216, 168, 79, .22), transparent 26%),
+        radial-gradient(circle at 82% 8%, rgba(36, 164, 122, .18), transparent 24%),
+        linear-gradient(180deg, var(--green-800) 0 132px, #ebe4d9 132px 100%);
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto 0 0;
+      height: 16px;
+      background: var(--green-800);
+      pointer-events: none;
+    }
+    button, select, input, textarea { font: inherit; }
+    .shell {
+      max-width: 1210px;
+      height: min(calc(100vh - 60px), 880px);
+      min-height: min(680px, calc(100vh - 60px));
+      margin: 30px auto;
+      display: grid;
+      grid-template-columns: 342px 1fr;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, .5);
+      border-radius: 24px;
+      background: var(--paper);
       box-shadow: var(--shadow);
     }
-    aside { border-right: 1px solid var(--line); background: #faf9f5; }
+    aside {
+      min-height: 0;
+      overflow-y: auto;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #fffdf8, #f8f3ea);
+    }
     .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 22px 20px 17px;
+      gap: 14px;
+      padding: 22px 20px 18px;
       border-bottom: 1px solid var(--line);
+      background: linear-gradient(135deg, rgba(255, 255, 255, .98), rgba(241, 248, 244, .9));
     }
-    .avatar {
-      width: 46px; height: 46px; border-radius: 50%;
-      display: grid; place-items: center;
-      color: white; font-size: 22px; font-weight: 700;
-      background: linear-gradient(145deg, var(--green-bright), var(--green));
+    .logo {
+      width: 54px;
+      height: 54px;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 8px 15px rgba(17, 105, 73, .18));
     }
-    h1 { margin: 0; font-size: 19px; }
-    .sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
-    .settings { padding: 18px; }
-    .label {
-      display: block;
-      margin: 14px 0 7px;
+    .logo text { font-family: "Segoe UI", Arial, sans-serif; font-weight: 800; }
+    h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+    .sub { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .tagline {
+      margin: 14px 18px 0;
+      padding: 13px 14px;
+      border: 1px solid #d8ecdf;
+      border-radius: 16px;
+      background: var(--green-050);
+      color: #33544b;
       font-size: 12px;
-      font-weight: 700;
-      color: var(--muted);
+      line-height: 1.45;
+    }
+    .tagline strong { display: block; margin-bottom: 3px; color: var(--green-800); font-size: 12.5px; }
+    .settings { padding: 15px 18px 22px; }
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 13px 0 9px;
+      color: var(--green-900);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .05em;
       text-transform: uppercase;
-      letter-spacing: .04em;
+    }
+    .section-title::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--gold);
+    }
+    .field-card {
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, .76);
+      box-shadow: 0 5px 18px rgba(20, 46, 39, .04);
+    }
+    .field-card + .field-card { margin-top: 10px; }
+    .label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      color: var(--green-900);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .help {
+      color: var(--muted);
+      font-size: 11.5px;
+      line-height: 1.4;
     }
     select, input[type="number"] {
       width: 100%;
-      border: 1px solid var(--line);
+      margin-top: 8px;
+      border: 1px solid #ded5c6;
+      border-radius: 12px;
       background: white;
-      border-radius: 10px;
-      padding: 11px;
+      color: var(--ink);
+      padding: 11px 12px;
       font-size: 14px;
+      outline: none;
     }
-    .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    select:focus, input[type="number"]:focus, textarea:focus {
+      border-color: var(--green-500);
+      box-shadow: 0 0 0 3px rgba(36, 164, 122, .12);
+    }
+    .presets {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 9px;
+      margin-top: 10px;
+    }
     .preset {
+      min-height: 74px;
       border: 1px solid var(--line);
-      padding: 10px 6px;
+      padding: 10px;
       background: white;
-      border-radius: 10px;
+      border-radius: 14px;
       cursor: pointer;
-      font-weight: 600;
+      text-align: left;
       color: var(--muted);
+      transition: .16s ease;
     }
-    .preset.active { border-color: var(--green-bright); background: #e9f8f1; color: var(--green); }
-    .advanced { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .preset strong { display: block; color: var(--ink); font-size: 13px; }
+    .preset span { display: block; margin-top: 3px; font-size: 11px; line-height: 1.3; }
+    .preset.active {
+      border-color: var(--green-500);
+      background: var(--green-100);
+      color: #315d51;
+      box-shadow: 0 7px 16px rgba(36, 164, 122, .12);
+    }
+    .advanced {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .mini-field label {
+      display: block;
+      color: var(--green-900);
+      font-size: 11.5px;
+      font-weight: 800;
+    }
+    .button-row { display: grid; gap: 10px; margin-top: 14px; }
     .apply, .reset {
       width: 100%;
-      margin-top: 16px;
-      padding: 11px;
-      border-radius: 10px;
+      padding: 12px 14px;
+      border-radius: 13px;
       cursor: pointer;
-      font-weight: 700;
+      font-weight: 800;
+      transition: transform .12s ease, box-shadow .12s ease;
     }
-    .apply { background: var(--green); border: 0; color: white; }
-    .reset { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+    .apply {
+      border: 0;
+      color: white;
+      background: linear-gradient(135deg, var(--green-800), var(--green-500));
+      box-shadow: 0 11px 20px rgba(18, 104, 84, .2);
+    }
+    .reset { border: 1px solid var(--line); background: white; color: var(--green-900); }
+    .apply:hover, .reset:hover, .chip:hover, .send:hover { transform: translateY(-1px); }
     .notice {
-      margin-top: 15px; padding: 11px; border-radius: 10px;
-      font-size: 12px; line-height: 1.45; color: var(--muted);
-      background: #f1efe9;
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 14px;
+      color: var(--muted);
+      background: #f1eee7;
+      font-size: 12px;
+      line-height: 1.45;
     }
-    main { display: flex; flex-direction: column; background: var(--cream); }
+    .notice strong { color: var(--green-900); }
+    .status-card {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: start;
+      border: 1px solid #d8ecdf;
+      background: var(--green-050);
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      margin-top: 4px;
+      border-radius: 50%;
+      background: var(--green-500);
+      box-shadow: 0 0 0 5px rgba(36, 164, 122, .12);
+    }
+    main { min-height: 0; display: flex; flex-direction: column; background: var(--cream); }
     .topbar {
-      height: 72px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: space-between;
-      background: #fbfaf7; border-bottom: 1px solid var(--line); padding: 0 22px;
+      min-height: 78px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 0 23px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 248, .94);
+      backdrop-filter: blur(8px);
     }
-    .contact { display: flex; align-items: center; gap: 12px; }
-    .online { color: var(--green-bright); font-size: 13px; }
+    .contact { display: flex; align-items: center; gap: 13px; }
+    .avatar-small {
+      width: 46px;
+      height: 46px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      color: white;
+      background: linear-gradient(145deg, var(--green-500), var(--green-800));
+      font-size: 20px;
+      font-weight: 900;
+      box-shadow: 0 10px 18px rgba(18, 104, 84, .18);
+    }
+    .online { margin-top: 3px; color: var(--green-500); font-size: 13px; }
+    .top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .badge {
-      border: 1px solid #bfe1d3; background: #e9f8f1; color: var(--green);
-      border-radius: 999px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+      border: 1px solid #bfe1d3;
+      border-radius: 999px;
+      padding: 8px 13px;
+      background: var(--green-100);
+      color: var(--green-800);
+      font-size: 12px;
+      font-weight: 800;
     }
+    .badge.soft { color: #8a6723; background: #fff7df; border-color: #edd896; }
     #messages {
-      flex: 1; overflow-y: auto; padding: 26px 7%;
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 26px 7%;
       background-color: #eee8dc;
-      background-image: radial-gradient(#dfd8cb 1px, transparent 1px);
-      background-size: 20px 20px;
+      background-image:
+        linear-gradient(rgba(238, 232, 220, .9), rgba(238, 232, 220, .9)),
+        radial-gradient(#d8d0c1 1px, transparent 1px);
+      background-size: auto, 20px 20px;
     }
-    .message { max-width: min(76%, 570px); margin: 0 0 13px; line-height: 1.5; font-size: 14.5px; }
+    .message { max-width: min(78%, 640px); margin: 0 0 14px; line-height: 1.52; font-size: 14.5px; }
     .bubble {
-      padding: 11px 14px; border-radius: 12px;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+      padding: 13px 15px;
+      border-radius: 17px;
+      box-shadow: 0 7px 18px rgba(21, 40, 34, .08);
       white-space: pre-wrap;
     }
-    .bot .bubble { background: white; border-top-left-radius: 3px; }
+    .bot .bubble { background: rgba(255, 255, 255, .98); border-top-left-radius: 5px; }
     .user { margin-left: auto; }
-    .user .bubble { background: var(--green-soft); border-top-right-radius: 3px; }
-    .meta { color: var(--muted); font-size: 11px; margin: 5px 5px 0; }
+    .user .bubble {
+      background: linear-gradient(135deg, #d8f8d4, #c9f2d0);
+      border-top-right-radius: 5px;
+    }
+    .meta { color: var(--muted); font-size: 11px; margin: 5px 6px 0; }
     .user .meta { text-align: right; }
     .origin {
-      display: inline-flex; align-items: center; gap: 5px;
-      margin: 0 0 8px; padding: 4px 9px; border-radius: 999px;
-      font-size: 11px; font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0 0 8px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
     }
     .origin.system { background: #f1efe9; color: #5b6965; }
     .origin.llm { background: #e8f7ef; color: #116949; }
     .origin.guard { background: #fff2d8; color: #8a5611; }
     .origin.fallback { background: #f8e4df; color: #983b32; }
-    .suggestions { display: flex; gap: 8px; flex-wrap: wrap; padding: 9px 20px; background: #fbfaf7; }
+    .composer {
+      flex-shrink: 0;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 253, 248, .97);
+    }
+    .suggestions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 12px 18px 4px;
+    }
     .chip {
-      border: 1px solid #cee6da; background: white; color: var(--green);
-      border-radius: 18px; padding: 7px 12px; cursor: pointer; font-size: 12px;
+      border: 1px solid #cbe7da;
+      background: white;
+      color: var(--green-800);
+      border-radius: 999px;
+      padding: 8px 13px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: .14s ease;
     }
-    form {
-      padding: 14px 18px 18px;
-      background: #fbfaf7; display: flex; gap: 10px;
-    }
+    form { padding: 12px 18px 18px; display: flex; gap: 10px; align-items: flex-end; }
     textarea {
-      resize: none; flex: 1; max-height: 110px;
-      border: 1px solid var(--line); border-radius: 22px;
-      padding: 12px 17px; font: inherit; outline: none;
+      resize: none;
+      flex: 1;
+      max-height: 120px;
+      border: 1px solid #ded5c6;
+      border-radius: 22px;
+      padding: 13px 17px;
+      outline: none;
+      background: white;
     }
-    textarea:focus { border-color: var(--green-bright); }
     .send {
-      width: 48px; height: 48px; border: 0; border-radius: 50%;
-      background: var(--green); color: white; cursor: pointer; font-size: 19px;
+      width: 50px;
+      height: 50px;
+      border: 0;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--green-800), var(--green-500));
+      color: white;
+      cursor: pointer;
+      font-size: 20px;
+      box-shadow: 0 10px 18px rgba(18, 104, 84, .22);
     }
-    .send:disabled { opacity: .5; cursor: wait; }
-    @media (max-width: 760px) {
-      body { background: var(--paper); }
-      .shell { height: 100vh; min-height: 0; margin: 0; border-radius: 0; display: flex; flex-direction: column; }
-      aside { border: 0; border-bottom: 1px solid var(--line); }
-      .brand { padding: 12px 16px; }
-      .settings { padding: 8px 14px 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-      .settings .label, .advanced, .notice, .reset { display: none; }
-      .settings .apply { margin: 0; }
-      main { min-height: 0; flex: 1; }
-      .message { max-width: 88%; }
+    .send:disabled { opacity: .55; cursor: wait; transform: none; }
+    @media (max-width: 860px) {
+      body { overflow: auto; background: var(--paper); }
+      .shell {
+        height: auto;
+        min-height: 100vh;
+        margin: 0;
+        border-radius: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      aside { border-right: 0; border-bottom: 1px solid var(--line); max-height: none; }
+      .settings { display: grid; grid-template-columns: 1fr; gap: 8px; }
+      .tagline { display: none; }
+      main { min-height: 620px; flex: 1; }
+      .message { max-width: 90%; }
+      .topbar { align-items: flex-start; padding: 16px; flex-direction: column; }
     }
   </style>
 </head>
@@ -172,63 +373,128 @@
   <div class="shell">
     <aside>
       <div class="brand">
-        <div class="avatar">P</div>
+        <svg class="logo" viewBox="0 0 64 64" aria-label="Logo de PachaBot" role="img">
+          <defs>
+            <linearGradient id="logoGradient" x1="12" y1="8" x2="54" y2="58">
+              <stop stop-color="#27ad80"/>
+              <stop offset="1" stop-color="#126854"/>
+            </linearGradient>
+          </defs>
+          <rect width="64" height="64" rx="20" fill="url(#logoGradient)"/>
+          <path d="M18 40c3-10 9-18 18-24 2 8 6 14 12 19-8 1-15 4-21 10-3-1-6-3-9-5Z" fill="#fff7df" opacity=".96"/>
+          <circle cx="23" cy="22" r="3" fill="#d8a84f"/>
+          <text x="32" y="43" text-anchor="middle" font-size="22" fill="white">P</text>
+        </svg>
         <div>
           <h1>PachaBot</h1>
-          <div class="sub">Simulador de desarrollo local</div>
+          <div class="sub">Asistente virtual municipal para orientación ciudadana</div>
         </div>
       </div>
+      <div class="tagline">
+        <strong>Prototipo LLM + RAG documental</strong>
+        Consulta trámites, requisitos, zonas, giros y fuentes normativas de comercio ambulatorio.
+      </div>
       <section class="settings">
-        <label class="label" for="model">Modelo LLM</label>
-        <select id="model"></select>
-        <label class="label">Respuesta</label>
-        <div class="presets">
-          <button class="preset active" data-think="false" type="button">Veloz</button>
-          <button class="preset" data-think="true" type="button">Pensamiento</button>
+        <div class="section-title">Configuración del asistente</div>
+
+        <div class="field-card">
+          <div class="label-row">
+            <span>Modelo LLM</span>
+          </div>
+          <div class="help">Motor que redacta la respuesta final usando la evidencia recuperada. OpenAI responde en la nube; Ollama es local si se activa.</div>
+          <select id="model"></select>
         </div>
-        <label class="label">Ajustes</label>
-        <div class="advanced">
-          <input id="temperature" type="number" min="0" max="2" step="0.1" value="0.2" title="Temperatura">
-          <input id="tokens" type="number" min="32" max="2048" step="10" value="400" title="Tokens máximos">
+
+        <div class="field-card">
+          <div class="label-row">
+            <span>Modo de respuesta</span>
+          </div>
+          <div class="help">Controla si el asistente prioriza rapidez o razonamiento extendido. Para exposición, usa Veloz.</div>
+          <div class="presets">
+            <button class="preset active" data-think="false" type="button">
+              <strong>Veloz</strong>
+              <span>Menor espera. Ideal para demo y atención ciudadana.</span>
+            </button>
+            <button class="preset" data-think="true" type="button">
+              <strong>Pensamiento</strong>
+              <span>Más análisis. Útil solo con modelos que lo soportan.</span>
+            </button>
+          </div>
         </div>
-        <button id="apply" class="apply" type="button">Aplicar configuracion</button>
-        <button id="reset" class="reset" type="button">Nueva conversación</button>
-        <div class="notice" id="config-status">
-          El modo veloz desactiva pensamiento extendido cuando se usa IA local.
+
+        <div class="field-card">
+          <div class="label-row">
+            <span>Parámetros</span>
+          </div>
+          <div class="help">Ajustes de generación. No cambian la evidencia RAG, solo el estilo y longitud de la respuesta.</div>
+          <div class="advanced">
+            <div class="mini-field">
+              <label for="temperature">Temperatura</label>
+              <input id="temperature" type="number" min="0" max="2" step="0.1" value="0.2" title="Temperatura">
+              <div class="help">Creatividad. 0.2 = más preciso y estable.</div>
+            </div>
+            <div class="mini-field">
+              <label for="tokens">Máx. tokens</label>
+              <input id="tokens" type="number" min="32" max="2048" step="10" value="400" title="Tokens máximos">
+              <div class="help">Límite de longitud. 400 suele bastar.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="button-row">
+          <button id="apply" class="apply" type="button">Aplicar configuración</button>
+          <button id="reset" class="reset" type="button">Nueva conversación</button>
+        </div>
+
+        <div class="notice status-card" id="config-status-wrap">
+          <span class="status-dot"></span>
+          <span id="config-status">Cargando configuración del proveedor LLM...</span>
         </div>
         <div class="notice">
-          PachaBot usa el proveedor LLM configurado. Con OpenAI activo, Ollama no
-          se consulta ni se inicia.
+          <strong>Nota de demo:</strong> PachaBot usa documentos locales y un índice de búsqueda. Con OpenAI activo, Ollama no se consulta ni se inicia.
         </div>
       </section>
     </aside>
+
     <main>
       <header class="topbar">
         <div class="contact">
-          <div class="avatar">P</div>
+          <div class="avatar-small">P</div>
           <div>
             <strong>Asistente municipal</strong>
-            <div class="online" id="runtime">conectando con el proveedor LLM...</div>
+            <div class="online" id="runtime">Conectando con el proveedor LLM...</div>
           </div>
         </div>
-        <div class="badge" id="mode-badge">VELOZ</div>
+        <div class="top-actions">
+          <div class="badge soft">RAG documental</div>
+          <div class="badge" id="mode-badge">VELOZ</div>
+        </div>
       </header>
+
       <section id="messages">
         <div class="message bot">
-          <div class="bubble"><span class="origin system">Interfaz</span><br>Escribe un mensaje para comenzar la conversación con PachaBot.</div>
+          <div class="bubble">
+            <span class="origin system">Interfaz</span><br>
+            ¡Hola! Soy PachaBot 😊 Puedes escribirme con tus propias palabras para consultar sobre comercio ambulatorio, requisitos, giros, zonas o renovación.
+          </div>
         </div>
       </section>
-      <div class="suggestions">
-        <button class="chip" type="button">¿Qué requisitos necesito para vender en la vía pública?</button>
-        <button class="chip" type="button">¿Puedo vender en una zona rígida?</button>
-        <button class="chip" type="button">¿Cuánto cuesta exactamente este trámite actualmente?</button>
+
+      <div class="composer">
+        <div class="suggestions">
+          <button class="chip" type="button">¿Qué requisitos necesito para vender en la vía pública?</button>
+          <button class="chip" type="button">¿Cuántos giros permitidos existen?</button>
+          <button class="chip" type="button">¿Puedo vender en una zona rígida?</button>
+          <button class="chip" type="button">¿Cuánto cuesta este trámite?</button>
+        </div>
+        <form id="chat-form">
+          <textarea id="message-input" rows="1" placeholder="Escribe una consulta ciudadana..." required></textarea>
+          <button class="send" id="send" type="submit" aria-label="Enviar">➤</button>
+        </form>
       </div>
-      <form id="chat-form">
-        <textarea id="message-input" rows="1" placeholder="Escribe una consulta ciudadana..." required></textarea>
-        <button class="send" id="send" type="submit" aria-label="Enviar">➤</button>
-      </form>
     </main>
   </div>
+
   <script>
     const sessionId = sessionStorage.getItem("pachabot-session") || `web-${crypto.randomUUID()}`;
     sessionStorage.setItem("pachabot-session", sessionId);
@@ -238,6 +504,11 @@
     function setStatus(text, error = false) {
       byId("config-status").textContent = text;
       byId("config-status").style.color = error ? "#a02d22" : "";
+      const dot = document.querySelector(".status-dot");
+      if (dot) {
+        dot.style.background = error ? "#a54135" : "#24a47a";
+        dot.style.boxShadow = error ? "0 0 0 5px rgba(165, 65, 53, .12)" : "0 0 0 5px rgba(36, 164, 122, .12)";
+      }
     }
     function setThink(value) {
       think = value;
@@ -309,7 +580,7 @@
         if (config.message) setStatus(config.message, !config.available);
       } catch (error) {
         byId("runtime").textContent = "API no disponible";
-        setStatus("No se pudo consultar la configuracion del proveedor LLM. Revisa que el servidor este iniciado.", true);
+        setStatus("No se pudo consultar la configuración del proveedor LLM. Revisa que el servidor esté iniciado.", true);
       }
     }
     async function applyConfig() {
@@ -328,12 +599,12 @@
       if (!response.ok) throw new Error(result.detail || "No se pudo configurar el proveedor LLM.");
       const providerLabel = providerLabelFor(result.provider);
       byId("runtime").textContent = `${providerLabel}: ${result.active_model}`;
-      setStatus(`Activo: ${providerLabel} | ${result.active_model} | ${result.think ? "pensamiento" : "veloz"} | maximo ${result.max_tokens} tokens.`);
+      setStatus(`Activo: ${providerLabel} | ${result.active_model} | ${result.think ? "pensamiento" : "veloz"} | máximo ${result.max_tokens} tokens.`);
     }
     async function sendMessage(text) {
       appendMessage(text, "user", new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}));
       byId("send").disabled = true;
-      const waiting = appendMessage("Consultando documentos y generando respuesta...", "bot", "", {kind: "system", label: "Procesando"});
+      const waiting = appendMessage("Consultando documentos y preparando una respuesta ciudadana...", "bot", "", {kind: "system", label: "Procesando"});
       try {
         await applyConfig();
         const response = await fetch("/chat", {
@@ -351,7 +622,7 @@
         waiting.remove();
         let origin;
         if (data.response_origin === "llm_conversation") {
-          origin = {kind: "llm", label: `Conversacion con LLM (${data.model_used})`};
+          origin = {kind: "llm", label: `Conversación con LLM (${data.model_used})`};
         } else if (data.response_origin === "llm") {
           origin = {kind: "llm", label: `LLM + documentos (${data.model_used})`};
         } else if (data.response_origin === "llm_no_evidence") {
@@ -386,7 +657,7 @@
         body: JSON.stringify({channel: "web", session_id: sessionId})
       });
       byId("messages").innerHTML = "";
-      appendMessage("Nueva conversación iniciada. Escribe un mensaje para conversar con PachaBot.", "bot", "", {kind: "system", label: "Interfaz"});
+      appendMessage("Nueva conversación iniciada. Puedes contarme tu consulta con tus propias palabras.", "bot", "", {kind: "system", label: "Interfaz"});
     });
     byId("chat-form").addEventListener("submit", (event) => {
       event.preventDefault();

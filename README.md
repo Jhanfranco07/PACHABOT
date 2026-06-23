@@ -622,3 +622,144 @@ generacion y servicios externos solo opcionales.
 - ampliar la base documental con tramites de licencias de funcionamiento y anuncios publicitarios
 - crear panel administrativo para revisar fuentes, conflictos y trazas
 - ejecutar evaluacion de usabilidad SUS con usuarios y pruebas de exactitud documental
+
+## Arquitectura actual del prototipo
+
+PachaBot esta organizado como un Asistente Virtual Inteligente Conversacional Municipal. No funciona como un menu fijo ni como una lista de respuestas quemadas: interpreta la consulta del vecino, revisa memoria conversacional, recupera evidencia documental y usa el LLM para explicar la respuesta en lenguaje ciudadano.
+
+Flujo principal:
+
+1. El ciudadano escribe por Telegram, consola, API o simulador web.
+2. `AssistantService` recibe el mensaje y coordina todo el flujo.
+3. `QueryRouter` detecta una primera intencion con reglas flexibles.
+4. `IntentInterpreterService` usa el LLM como apoyo cuando la intencion es ambigua o de baja confianza.
+5. `QueryRewriter` reformula seguimientos como "y cuanto cuesta", "el segundo requisito" o "art 36" sin perder el contexto.
+6. `DocumentToolkit` prepara la busqueda documental y ordena la evidencia.
+7. `RetrievalService` busca en tramites, FAQ, chunks normativos, norma consolidada y datos estructurados.
+8. El validador de evidencia decide si hay sustento suficiente, parcial o si corresponde fallback.
+9. `LLMService` genera la respuesta final con OpenAI por defecto u Ollama si se activa manualmente.
+10. La memoria guarda historial, tema, ultima intencion, fuentes usadas y opciones de continuidad.
+
+Estructura de capas:
+
+```text
+app/
+|-- bot/                  # Canal Telegram
+|-- channels/             # Adaptadores de canal
+|-- web/                  # Simulador local profesional
+|-- services/
+|   |-- assistant_service.py
+|   |-- intent_interpreter.py
+|   |-- query_router.py
+|   |-- query_rewriter.py
+|   |-- retrieval_service.py
+|   |-- llm_service.py
+|   `-- document_service.py
+|-- tools/
+|   `-- document_toolkit.py
+|-- memory/               # Historial y estado conversacional
+|-- prompts/              # Prompt institucional y reglas de tono
+|-- models/               # Esquemas internos
+`-- main.py               # FastAPI y simulador
+
+data/
+|-- raw/                  # Ordenanzas originales
+|-- cleaned/              # Texto limpio
+|-- consolidated/         # Norma vigente consolidada
+|-- processed/            # Chunks para RAG
+|-- tramites/             # Fichas estructuradas
+|-- faq/                  # Preguntas frecuentes orientativas
+|-- vectorstore/          # Indice local
+`-- runtime/              # Conversaciones, modos y debug
+```
+
+Componentes clave:
+
+- `AssistantService`: orquestador conversacional. Evita responder de forma aislada y decide cuando usar memoria, RAG, LLM o fallback.
+- `IntentInterpreterService`: segunda capa inteligente para consultas ambiguas. Si el router no esta seguro, el LLM ayuda a interpretar o pedir aclaracion.
+- `QueryRouter`: clasifica intenciones como requisitos, renovacion, costos, zonas, sanciones, definiciones, rubros y articulos normativos.
+- `QueryRewriter`: convierte seguimientos en consultas completas, por ejemplo "y el costo?" o "que dice el art. 36".
+- `RetrievalService`: recupera evidencia por fuente, intencion, sinonimos, articulos y metadatos.
+- `DocumentToolkit`: arma el contexto limpio para que el LLM no reciba JSON crudo ni informacion contradictoria.
+- `LLMService`: usa OpenAI como proveedor principal. Ollama queda disponible, pero no se consulta si `LLM_PROVIDER=openai`.
+- `app/web/index.html`: prototipo visual para demostracion local, con panel de parametros, estado del modelo y chat ciudadano.
+
+## Diferencia con un chatbot basico
+
+Un chatbot basico suele responder por coincidencia de palabras, menus o FAQ rigidas. PachaBot busca comportarse como un orientador municipal:
+
+- entiende preguntas escritas con errores o lenguaje informal
+- distingue tramite nuevo, renovacion, costo, zona, rubro, SISA, articulo y seguimiento
+- usa memoria para continuar una conversacion
+- recupera evidencia antes de responder
+- explica en lenguaje claro, sin sonar legalista
+- pregunta al ciudadano cuando falta un dato importante
+- no inventa costos, requisitos, zonas, sanciones ni articulos
+
+## Uso de OpenAI y Ollama
+
+Por defecto se recomienda usar OpenAI para que el equipo no consuma recursos locales:
+
+```env
+LLM_PROVIDER=openai
+OPENAI_API_KEY=tu_api_key
+OPENAI_MODEL=gpt-5.4-mini
+OPENAI_MAX_OUTPUT_TOKENS=500
+OPENAI_TEMPERATURE=0.2
+OLLAMA_ENABLED=false
+```
+
+Para usar Ollama manualmente:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_ENABLED=true
+OLLAMA_MODEL=qwen3.5:0.8b
+OLLAMA_BASE_URL=http://localhost:11434
+```
+
+Ollama no se inicia automaticamente. Si `LLM_PROVIDER=openai`, el sistema no consulta `http://localhost:11434`.
+
+## Demo con ngrok
+
+Ngrok sirve para compartir temporalmente el simulador local con otra persona durante la exposicion. Debes mantener abiertas la terminal de FastAPI y la terminal de ngrok.
+
+Terminal 1, levantar PachaBot:
+
+```powershell
+cd "C:\Users\PC\Documents\2 - PROYECTOS DEV\BOT"
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Verifica en tu navegador:
+
+```text
+http://127.0.0.1:8000/simulator
+```
+
+Terminal 2, abrir el puente:
+
+```powershell
+ngrok http 8000
+```
+
+Ngrok mostrara una URL parecida a:
+
+```text
+https://xxxx-xxxx.ngrok-free.app
+```
+
+Comparte con tu compañero:
+
+```text
+https://xxxx-xxxx.ngrok-free.app/simulator
+```
+
+Notas para la demo:
+
+- no cierres ninguna de las dos terminales
+- no compartas tu archivo `.env` ni tu `OPENAI_API_KEY`
+- en el plan gratuito la URL de ngrok cambia cada vez que reinicias el tunel
+- si aparece una pantalla de aviso de ngrok, tu compañero solo debe continuar al sitio
+- para cerrar la demo, presiona `Ctrl+C` en la terminal de ngrok y luego en la de FastAPI

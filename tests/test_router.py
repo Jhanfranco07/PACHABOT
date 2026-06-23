@@ -20,7 +20,14 @@ def test_router_accepts_generic_article_question() -> None:
     router = QueryRouter()
     routed = router.route("Dime que dice el articulo 7")
     assert routed.in_domain is True
-    assert routed.intent == QueryIntent.GENERAL
+    assert routed.intent == QueryIntent.NORMATIVA
+
+
+def test_router_detects_short_art_alias_as_normative_query() -> None:
+    routed = QueryRouter().route("y que dice el art 36?")
+
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.NORMATIVA
 
 
 def test_router_accepts_natural_municipal_case_without_exact_keywords() -> None:

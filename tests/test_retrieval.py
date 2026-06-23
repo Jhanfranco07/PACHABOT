@@ -81,6 +81,46 @@ def test_retrieval_prioritizes_exact_article_match(tmp_path: Path) -> None:
     assert results[0].article_label == "7"
 
 
+def test_retrieval_prioritizes_short_art_alias_match(tmp_path: Path) -> None:
+    settings = _isolated_settings(tmp_path)
+    logger = setup_logging("INFO")
+    service = RetrievalService(settings, logger)
+    chunks = [
+        DocumentChunk(
+            chunk_id="renewal",
+            document_id="requisitos",
+            source_title="Ficha de renovacion",
+            text="La renovacion requiere voucher y DNI.",
+            tipo_contenido="requisito",
+            prioridad_retrieval=4,
+        ),
+        DocumentChunk(
+            chunk_id="article-36",
+            document_id="ordenanza_227_2019",
+            source_title="Ordenanza 227-2019-MDP/C",
+            text=(
+                "Articulo 36. El comerciante informal autorizado esta obligado al pago "
+                "por concepto de SISA al valor de S/1.00 diario."
+            ),
+            section_title="TITULO VI | PAGO SISA",
+            article_label="36",
+            tipo_contenido="costo",
+            vigencia="vigente",
+            prioridad_retrieval=3,
+            fuente="Ordenanza 227-2019-MDP/C, Articulo 36",
+        ),
+    ]
+    service.build_index(chunks)
+
+    results = service.search("y que dice el art. 36?", top_k=2, history=[
+        # La historia no debe contaminar una consulta de articulo exacto.
+    ])
+
+    assert results
+    assert results[0].article_label == "36"
+    assert "SISA" in results[0].text
+
+
 def test_retrieval_prefers_definition_over_preamble(tmp_path: Path) -> None:
     settings = _isolated_settings(tmp_path)
     logger = setup_logging("INFO")
@@ -301,6 +341,25 @@ def test_retrieval_loads_structured_rubros_from_tramite(tmp_path: Path) -> None:
     assert results
     assert results[0].tipo_contenido == "rubro"
     assert "emoliente" in results[0].text.lower()
+
+
+def test_retrieval_loads_complete_project_giros_with_count(tmp_path: Path) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    settings = _isolated_settings(tmp_path)
+    settings.tramites_data_dir = project_root / "data" / "tramites"
+
+    service = RetrievalService(settings, setup_logging("INFO"))
+    chunks = service.compose_knowledge_index([])
+    rubro_chunk = next(
+        chunk
+        for chunk in chunks
+        if chunk.chunk_id == "tramite-tramite_comercio_ambulatorio-rubros"
+    )
+
+    assert rubro_chunk.article_label == "21"
+    assert "5 rubros y 20 giros permitidos" in rubro_chunk.text
+    assert "G001" in rubro_chunk.text
+    assert "G020" in rubro_chunk.text
 
 
 def test_retrieval_loads_differentiated_requirement_cases(tmp_path: Path) -> None:

@@ -62,6 +62,10 @@ class RoutedQuery:
     intent: QueryIntent
     in_domain: bool
     matched_keywords: list[str] = field(default_factory=list)
+    confidence: float = 0.75
+    needs_clarification: bool = False
+    clarification_question: str = ""
+    interpreted_query: str = ""
 
 
 @dataclass(slots=True)
