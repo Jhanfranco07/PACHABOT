@@ -347,7 +347,29 @@ class RetrievalService:
                 bonus += 0.75
             if chunk.article_label == "5" and chunk.vigencia == "vigente":
                 bonus += 0.90
-        if any(term in normalized_query for term in ("giro", "giros", "rubro", "rubros", "que puedo vender")):
+        product_or_rubro_query = any(
+            term in normalized_query
+            for term in (
+                "giro",
+                "giros",
+                "rubro",
+                "rubros",
+                "que puedo vender",
+                "productos de origen industrial",
+                "producto industrial",
+                "productos envasados",
+                "golosinas",
+                "galletas",
+                "caramelos",
+                "chocolates",
+                "frutas",
+                "verduras",
+                "emoliente",
+                "sandwiches",
+                "canchita",
+            )
+        )
+        if product_or_rubro_query:
             if chunk.tipo_contenido == "rubro":
                 bonus += 2.50
             if chunk.knowledge_layer == "tramites" and chunk.tipo_contenido == "rubro":
@@ -930,6 +952,9 @@ def _format_rubro_permitido(item: Any) -> str:
             label = f"{codigo}: {descripcion}" if codigo else descripcion
             if label:
                 lines.append(f"  - {label}")
+                examples = _examples_for_giro(codigo, descripcion)
+                if examples:
+                    lines.append(f"    Ejemplos orientativos: {examples}")
         elif str(giro).strip():
             lines.append(f"  - {giro}")
     if fuente:
@@ -961,6 +986,32 @@ def _format_rubros_permitidos(items: Any) -> str:
         "La autorizacion municipal debe corresponder a un giro especifico."
     )
     return "\n\n".join([summary, *blocks])
+
+
+def _examples_for_giro(codigo: str, descripcion: str) -> str:
+    normalized = normalize_for_search(f"{codigo} {descripcion}")
+    if "g001" in normalized or "golosina" in normalized:
+        return (
+            "galletas, caramelos, chocolates u otras golosinas envasadas, "
+            "siempre que cuenten con registro sanitario y fecha de vencimiento vigente."
+        )
+    if "g002" in normalized or "frutas" in normalized or "verduras" in normalized:
+        return "frutas o verduras frescas autorizadas."
+    if "g003" in normalized or "productos naturales" in normalized:
+        return "productos naturales con registro sanitario."
+    if "g004" in normalized or "emoliente" in normalized:
+        return "emoliente, quinua, maca o soya."
+    if "g005" in normalized or "potajes" in normalized:
+        return "potajes tradicionales preparados para venta autorizada."
+    if "g006" in normalized or "dulces tradicionales" in normalized:
+        return "dulces tradicionales."
+    if "g007" in normalized or "sandwich" in normalized:
+        return "sandwiches."
+    if "g008" in normalized or "jugo de naranja" in normalized:
+        return "jugo de naranja y similares."
+    if "g009" in normalized or "canchita" in normalized or "confiteria" in normalized:
+        return "canchita, confiteria y similares."
+    return ""
 
 
 def _looks_like_new_requirement_query(normalized_query: str) -> bool:

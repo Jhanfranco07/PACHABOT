@@ -121,6 +121,13 @@ def test_router_detects_rubros_and_giros() -> None:
     assert routed.intent == QueryIntent.RUBROS
 
 
+def test_router_relates_common_product_to_rubros() -> None:
+    routed = QueryRouter().route("te refieres a galletas?")
+
+    assert routed.in_domain is True
+    assert routed.intent == QueryIntent.RUBROS
+
+
 def test_router_detects_plain_language_non_compliance() -> None:
     routed = QueryRouter().route("Que pasa si no cumplo con mi puesto")
 

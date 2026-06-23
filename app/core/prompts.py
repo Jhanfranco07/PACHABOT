@@ -180,6 +180,13 @@ def build_conversational_guidance(question: str, chunks: list[RetrievedChunk]) -
             "Si el caso trata de giro o rubro, pregunta que producto o servicio vende "
             "exactamente, o si su autorizacion indica algun giro especifico."
         )
+        guidance.append(
+            "Si la evidencia recuperada incluye rubros, codigos de giro o ejemplos "
+            "orientativos, usalos para explicar con casos concretos. No digas que no "
+            "hay lista exacta si el contexto ya muestra el articulo 21 o el listado de "
+            "rubros/giros. Si el usuario menciona un producto, indica a que giro podria "
+            "asemejarse y aclara que la municipalidad confirma el giro autorizado."
+        )
     elif any(
         term in normalized
         for term in (

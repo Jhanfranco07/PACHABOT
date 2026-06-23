@@ -218,6 +218,16 @@ class QueryRouter:
             domain_score += 0.6
             matched_keywords.extend(domain_semantic_groups)
 
+        product_semantic_groups = {
+            "productos_industriales",
+            "productos_perecibles",
+            "productos_preparados",
+            "objetos_duraderos",
+            "servicios_comercio_ambulatorio",
+        }
+        if product_semantic_groups.intersection(semantic_groups):
+            intent_scores[QueryIntent.RUBROS] += 1.25
+
         if article_query or any(_contains_keyword(normalized, pattern) for pattern in LEGAL_PATTERNS):
             domain_score += 1.0
 

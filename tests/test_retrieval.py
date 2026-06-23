@@ -360,6 +360,23 @@ def test_retrieval_loads_complete_project_giros_with_count(tmp_path: Path) -> No
     assert "5 rubros y 20 giros permitidos" in rubro_chunk.text
     assert "G001" in rubro_chunk.text
     assert "G020" in rubro_chunk.text
+    assert "galletas" in rubro_chunk.text.lower()
+
+
+def test_retrieval_relates_common_product_to_giro(tmp_path: Path) -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    settings = _isolated_settings(tmp_path)
+    settings.tramites_data_dir = project_root / "data" / "tramites"
+
+    service = RetrievalService(settings, setup_logging("INFO"))
+    service.build_index(service.compose_knowledge_index([]))
+
+    results = service.search("te refieres a galletas?", top_k=3)
+
+    assert results
+    assert results[0].tipo_contenido == "rubro"
+    assert "G001" in results[0].text
+    assert "Golosinas" in results[0].text
 
 
 def test_retrieval_loads_differentiated_requirement_cases(tmp_path: Path) -> None:
